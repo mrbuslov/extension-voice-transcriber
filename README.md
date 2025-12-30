@@ -14,14 +14,7 @@ A VS Code extension that records your voice and transcribes it using OpenAI Whis
 - Auto-copy results to clipboard
 - Recover recordings if VS Code crashes
 
-## Installation
-
-### From VSIX
-
-1. Download the `.vsix` file
-2. In VS Code: Extensions → ... → Install from VSIX
-
-### Recording tools (recommended)
+## Recording tools Installation (recommended)
 
 The extension works best with audio utilities installed. Without them, it falls back to browser-based recording.
 
