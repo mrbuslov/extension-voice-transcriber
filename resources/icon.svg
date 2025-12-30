@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <linearGradient id="micGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4FC3F7"/>
+      <stop offset="100%" style="stop-color:#2196F3"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60" fill="url(#micGradient)"/>
+  <path d="M64 28c-8.8 0-16 7.2-16 16v24c0 8.8 7.2 16 16 16s16-7.2 16-16V44c0-8.8-7.2-16-16-16z" fill="white"/>
+  <path d="M88 60v8c0 13.3-10.7 24-24 24s-24-10.7-24-24v-8h-8v8c0 16.4 12.2 30 28 32v12h-12v8h32v-8h-12v-12c15.8-2 28-15.6 28-32v-8h-8z" fill="white"/>
+</svg>

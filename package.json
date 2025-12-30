@@ -1,0 +1,59 @@
+{
+  "name": "voice-transcriber",
+  "displayName": "Voice Transcriber",
+  "description": "Record voice and transcribe using OpenAI Whisper or local model. Speech-to-text for developers.",
+  "version": "0.1.0",
+  "publisher": "voice-transcriber",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "voice",
+    "transcription",
+    "speech-to-text",
+    "whisper",
+    "audio",
+    "dictation",
+    "speech recognition",
+    "voice to text",
+    "transcribe",
+    "recording"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "voiceTranscriber.open",
+        "title": "Voice Transcriber: Open Panel",
+        "icon": "$(mic)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "voiceTranscriber.open",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.x",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.x",
+    "@typescript-eslint/parser": "^6.x",
+    "@vscode/test-electron": "^2.3.0",
+    "eslint": "^8.x",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,576 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-editor-background);
+  padding: 16px;
+  line-height: 1.5;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* Sections */
+section {
+  background-color: var(--vscode-sideBar-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background-color: var(--vscode-sideBarSectionHeader-background);
+  cursor: pointer;
+  user-select: none;
+}
+
+.section-header:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.section-icon {
+  font-size: 16px;
+}
+
+.toggle-icon {
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.collapsed .toggle-icon {
+  transform: rotate(-90deg);
+}
+
+.section-content {
+  padding: 16px;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+  max-height: 1000px;
+  opacity: 1;
+}
+
+.section-content.collapsed {
+  max-height: 0;
+  padding: 0 16px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+/* Form Elements */
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--vscode-foreground);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+input[type="text"],
+input[type="password"],
+select,
+textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--vscode-focusBorder);
+}
+
+select {
+  cursor: pointer;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 8px;
+}
+
+.input-with-button input {
+  flex: 1;
+}
+
+.api-key-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.api-key-row input {
+  flex: 1;
+}
+
+.hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.status-text {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.status-text.success {
+  color: var(--vscode-testing-iconPassed);
+}
+
+.status-text.error {
+  color: var(--vscode-errorForeground);
+}
+
+/* Buttons */
+button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.primary-button {
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.primary-button:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.secondary-button {
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.secondary-button:hover:not(:disabled) {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
+.danger-button {
+  background-color: var(--vscode-inputValidation-errorBackground);
+  color: var(--vscode-inputValidation-errorForeground);
+  border: 1px solid var(--vscode-inputValidation-errorBorder);
+}
+
+.danger-button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.text-button {
+  background: none;
+  color: var(--vscode-textLink-foreground);
+  padding: 4px 8px;
+}
+
+.text-button:hover:not(:disabled) {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.icon-button {
+  background: none;
+  padding: 4px 8px;
+  color: var(--vscode-foreground);
+  min-width: 32px;
+}
+
+.icon-button:hover:not(:disabled) {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.btn-icon {
+  font-size: 14px;
+}
+
+/* Recording Section */
+#recording-section {
+  padding: 24px;
+  text-align: center;
+}
+
+#recording-status {
+  font-size: 18px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  color: var(--vscode-foreground);
+}
+
+#recording-status.recording {
+  color: var(--vscode-charts-red);
+}
+
+#recording-status.paused {
+  color: var(--vscode-charts-yellow);
+}
+
+#timer {
+  font-size: 32px;
+  font-family: 'Courier New', monospace;
+  font-weight: bold;
+  margin-bottom: 20px;
+  color: var(--vscode-foreground);
+}
+
+#recording-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+}
+
+.record-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.record-btn:hover:not(:disabled) {
+  background-color: var(--vscode-button-secondaryHoverBackground);
+  transform: scale(1.05);
+}
+
+.record-btn.primary {
+  width: 64px;
+  height: 64px;
+  background-color: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.record-btn.primary:hover:not(:disabled) {
+  background-color: var(--vscode-button-hoverBackground);
+}
+
+.record-btn.danger {
+  background-color: var(--vscode-inputValidation-errorBackground);
+  color: var(--vscode-errorForeground);
+}
+
+.record-btn.danger:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.record-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.record-btn.primary svg {
+  width: 32px;
+  height: 32px;
+}
+
+#progress-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px;
+  background-color: var(--vscode-input-background);
+  border-radius: 4px;
+}
+
+.spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--vscode-foreground);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Permission Error */
+.permission-error {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: var(--vscode-inputValidation-warningBackground);
+  border: 1px solid var(--vscode-inputValidation-warningBorder);
+  border-radius: 6px;
+  text-align: left;
+}
+
+.permission-error-icon {
+  font-size: 24px;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.permission-error-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-align: center;
+  color: var(--vscode-foreground);
+}
+
+.permission-error-instructions {
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.permission-error-instructions p {
+  margin-bottom: 8px;
+}
+
+.permission-error-instructions ol {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.permission-error-instructions li {
+  margin-bottom: 6px;
+}
+
+.permission-error-instructions code {
+  background-color: var(--vscode-textCodeBlock-background);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--vscode-editor-font-family);
+}
+
+.permission-error .text-button {
+  display: block;
+  margin: 12px auto 0;
+  text-align: center;
+}
+
+/* Browser Fallback Section */
+.browser-fallback-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--vscode-panel-border);
+  text-align: center;
+}
+
+.browser-fallback-section p {
+  margin-bottom: 12px;
+}
+
+.browser-fallback-section .primary-button {
+  padding: 10px 20px;
+}
+
+/* Transcription Section */
+#transcription-section {
+  display: none;
+}
+
+#transcription-section.visible {
+  display: block;
+}
+
+#transcription-content {
+  padding: 16px;
+}
+
+#transcription-text {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+#copy-status {
+  padding: 0 16px 16px;
+  color: var(--vscode-testing-iconPassed);
+}
+
+/* History Section */
+#history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background-color: var(--vscode-input-background);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.history-item:hover {
+  background-color: var(--vscode-list-hoverBackground);
+}
+
+.history-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-item-date {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 4px;
+}
+
+.history-item-preview {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item-copy {
+  flex-shrink: 0;
+}
+
+#clear-history-btn {
+  margin-top: 12px;
+}
+
+/* Advanced Settings */
+.advanced-settings {
+  margin-top: 16px;
+}
+
+.advanced-settings summary {
+  cursor: pointer;
+  padding: 8px 0;
+  color: var(--vscode-textLink-foreground);
+}
+
+.advanced-settings summary:hover {
+  color: var(--vscode-textLink-activeForeground);
+}
+
+.advanced-settings[open] summary {
+  margin-bottom: 12px;
+}
+
+/* Modal */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: var(--vscode-editor-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+}
+
+.modal-content h3 {
+  margin-bottom: 12px;
+  font-size: 18px;
+}
+
+.modal-content p {
+  margin-bottom: 20px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.modal-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 24px;
+  color: var(--vscode-descriptionForeground);
+}
+
+/* Responsive */
+@media (max-width: 400px) {
+  body {
+    padding: 12px;
+  }
+
+  #recording-controls {
+    flex-direction: column;
+  }
+
+  #recording-controls button {
+    width: 100%;
+  }
+}
