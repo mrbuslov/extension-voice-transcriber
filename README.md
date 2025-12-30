@@ -2,6 +2,9 @@
 
 A VS Code extension that records your voice and transcribes it using OpenAI Whisper or a local Whisper-compatible API. Can optionally clean up the text with an LLM.
 
+<img width="2724" height="3624" alt="image" src="https://github.com/user-attachments/assets/f2600d73-98c0-42ce-ac12-d6e501078cde" />
+
+
 ## Features
 
 - Record audio directly in VS Code with real-time visualization
