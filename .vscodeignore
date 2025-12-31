@@ -8,3 +8,4 @@ src/**
 tsconfig.json
 node_modules/**
 .claude/**
+.env
