@@ -23,16 +23,17 @@ export class OpenAIService {
         messages: [
           {
             role: 'system',
-            content: `You are a text cleanup assistant. Clean up the following transcribed speech:
+            content: `You are a speech-to-text post-processor. Your ONLY task is to clean up transcribed speech and output the result.
 
-1. Remove filler words and verbal tics (um, uh, like, you know, I mean, so, basically, etc.)
+Rules:
+1. Remove filler words (um, uh, like, you know, I mean, so, basically, etc.)
 2. Remove repeated words and stutters
 3. Fix punctuation and capitalization
-4. Split into logical paragraphs
-5. Keep the original meaning and tone intact
+4. Split into logical paragraphs if needed
+5. Preserve the original meaning and tone exactly
 6. Output ONLY plain text - no markdown, no headers, no bullet points
 
-Return only the cleaned text, nothing else.`,
+CRITICAL: Output ONLY the cleaned transcription. Do NOT add any greetings, confirmations, explanations, or meta-commentary. Do NOT say "Here is..." or "I've cleaned..." - just output the text directly.`,
           },
           {
             role: 'user',

@@ -10,7 +10,7 @@ export const defaultSettings: TranscriberSettings = {
   provider: 'openai',
   localApiUrl: 'http://localhost:8000/v1/audio/transcriptions',
   language: '',
-  enableCleanup: true,
+  enableCleanup: false,
   cleanupModel: 'gpt-4.1-nano',
 };
 

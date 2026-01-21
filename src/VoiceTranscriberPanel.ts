@@ -377,7 +377,7 @@ export class VoiceTranscriberPanel {
 
         <div class="form-group" id="cleanup-group">
           <label class="checkbox-label">
-            <input type="checkbox" id="enable-cleanup" checked>
+            <input type="checkbox" id="enable-cleanup">
             Clean up text with LLM
           </label>
         </div>
