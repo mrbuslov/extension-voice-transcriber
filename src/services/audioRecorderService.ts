@@ -157,7 +157,7 @@ export class AudioRecorderService {
       ];
     } else {
       // sox/rec
-      if (toolInfo.command === 'rec') {
+      if (toolInfo.command.endsWith('rec')) {
         // rec command (sox wrapper)
         args = [
           '-r', '16000',     // 16kHz sample rate

@@ -2,6 +2,11 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.3] - 2025-01-27
+
+### Fixed
+- Fixed recording start/stop on macOS when using full Homebrew paths for sox
+
 ## [0.1.2] - 2025-01-26
 
 ### Fixed
