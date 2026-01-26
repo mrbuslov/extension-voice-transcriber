@@ -2,11 +2,16 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
-## [0.1.1] - 2025-01-26
+## [0.1.2] - 2025-01-26
 
 ### Fixed
 - Sox detection on macOS now checks Homebrew paths directly (`/opt/homebrew/bin` for Apple Silicon, `/usr/local/bin` for Intel) since VS Code extensions don't inherit shell PATH
-- LLM cleanup is now disabled by default, improved cleanup prompt
+
+## [0.1.1] - 2025-01-26
+
+### Fixed
+- LLM cleanup is now disabled by default
+- Improved cleanup prompt
 
 ## [0.1.0] - 2024-12-30
 
