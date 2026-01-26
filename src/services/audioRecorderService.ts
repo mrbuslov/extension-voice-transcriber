@@ -17,9 +17,15 @@ export class AudioRecorderService {
   private isRecording = false;
   private startTime = 0;
 
-  /**
-   * Check which recording tools are available on the system
-   */
+  private static checkExecutable(execPath: string): boolean {
+    try {
+      fs.accessSync(execPath, fs.constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   static detectAvailableTools(): RecordingToolInfo[] {
     const tools: RecordingToolInfo[] = [];
     const platform = process.platform;
@@ -35,19 +41,47 @@ export class AudioRecorderService {
     }
 
     // Check for sox/rec
-    const soxCommand = platform === 'win32' ? 'sox' : 'rec';
-    const whichCommand = platform === 'win32' ? 'where' : 'which';
+    let soxFound = false;
 
-    try {
-      execSync(`${whichCommand} ${soxCommand}`, { stdio: 'ignore' });
-      tools.push({ tool: 'sox', command: soxCommand, available: true });
-    } catch {
-      // Try 'sox' directly on all platforms as fallback
+    // On macOS, check Homebrew paths directly (VS Code doesn't inherit shell PATH)
+    if (platform === 'darwin') {
+      const homebrewPaths = [
+        '/opt/homebrew/bin',  // Apple Silicon
+        '/usr/local/bin'      // Intel Mac
+      ];
+
+      for (const brewPath of homebrewPaths) {
+        const recPath = path.join(brewPath, 'rec');
+        const soxPath = path.join(brewPath, 'sox');
+
+        if (this.checkExecutable(recPath)) {
+          tools.push({ tool: 'sox', command: recPath, available: true });
+          soxFound = true;
+          break;
+        }
+        if (this.checkExecutable(soxPath)) {
+          tools.push({ tool: 'sox', command: soxPath, available: true });
+          soxFound = true;
+          break;
+        }
+      }
+    }
+
+    // Fallback: use which/where command
+    if (!soxFound) {
+      const soxCommand = platform === 'win32' ? 'sox' : 'rec';
+      const whichCommand = platform === 'win32' ? 'where' : 'which';
+
       try {
-        execSync(`${whichCommand} sox`, { stdio: 'ignore' });
-        tools.push({ tool: 'sox', command: 'sox', available: true });
+        execSync(`${whichCommand} ${soxCommand}`, { stdio: 'ignore' });
+        tools.push({ tool: 'sox', command: soxCommand, available: true });
       } catch {
-        tools.push({ tool: 'sox', command: soxCommand, available: false });
+        try {
+          execSync(`${whichCommand} sox`, { stdio: 'ignore' });
+          tools.push({ tool: 'sox', command: 'sox', available: true });
+        } catch {
+          tools.push({ tool: 'sox', command: soxCommand, available: false });
+        }
       }
     }
 
