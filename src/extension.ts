@@ -11,7 +11,9 @@ export function activate(context: vscode.ExtensionContext) {
   if (vscode.window.registerWebviewPanelSerializer) {
     vscode.window.registerWebviewPanelSerializer(VoiceTranscriberPanel.viewType, {
       async deserializeWebviewPanel(webviewPanel: vscode.WebviewPanel) {
-        VoiceTranscriberPanel.revive(webviewPanel, context);
+        // Close the stale restored panel and create fresh one
+        webviewPanel.dispose();
+        VoiceTranscriberPanel.createOrShow(context);
       },
     });
   }

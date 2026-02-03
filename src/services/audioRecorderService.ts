@@ -204,9 +204,6 @@ export class AudioRecorderService {
     });
   }
 
-  /**
-   * Stop recording and return the audio buffer
-   */
   async stop(): Promise<{ buffer: Buffer; mimeType: string }> {
     if (!this.isRecording || !this.process) {
       throw new Error('Not recording');
@@ -214,16 +211,19 @@ export class AudioRecorderService {
 
     return new Promise((resolve, reject) => {
       const tempFile = this.tempFile!;
+      const proc = this.process!;
+      let resolved = false;
+      let killTimeout: NodeJS.Timeout | null = null;
 
-      this.process!.on('close', () => {
+      const handleClose = () => {
+        if (resolved) return;
+        resolved = true;
+        if (killTimeout) clearTimeout(killTimeout);
+
         try {
-          // Read the recorded file
           if (fs.existsSync(tempFile)) {
             const buffer = fs.readFileSync(tempFile);
-
-            // Clean up temp file
             fs.unlinkSync(tempFile);
-
             this.cleanup();
             resolve({ buffer, mimeType: 'audio/wav' });
           } else {
@@ -234,15 +234,32 @@ export class AudioRecorderService {
           this.cleanup();
           reject(err);
         }
-      });
+      };
 
-      this.process!.on('error', (err) => {
+      proc.on('close', handleClose);
+      proc.on('error', (err) => {
+        if (resolved) return;
+        resolved = true;
+        if (killTimeout) clearTimeout(killTimeout);
         this.cleanup();
         reject(err);
       });
 
-      // Send SIGTERM to stop recording gracefully
-      this.process!.kill('SIGTERM');
+      // Send SIGTERM first (graceful)
+      proc.kill('SIGTERM');
+
+      // If SIGTERM doesn't work within 5 seconds, use SIGKILL
+      killTimeout = setTimeout(() => {
+        if (!resolved && !proc.killed) {
+          proc.kill('SIGKILL');
+          // Give SIGKILL 2 more seconds
+          setTimeout(() => {
+            if (!resolved) {
+              handleClose();
+            }
+          }, 2000);
+        }
+      }, 5000);
     });
   }
 

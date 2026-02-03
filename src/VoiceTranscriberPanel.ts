@@ -47,6 +47,8 @@ export class VoiceTranscriberPanel {
       }
     );
 
+    panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
+
     VoiceTranscriberPanel.currentPanel = new VoiceTranscriberPanel(panel, context);
   }
 
@@ -57,6 +59,9 @@ export class VoiceTranscriberPanel {
   private constructor(panel: vscode.WebviewPanel, context: vscode.ExtensionContext) {
     this._panel = panel;
     this._extensionUri = context.extensionUri;
+
+    // Set tab icon (also needed for revive)
+    this._panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     this._storage = new StorageService(context);
     this._whisper = new WhisperService(this._storage);
     this._openai = new OpenAIService(this._storage);
@@ -66,6 +71,17 @@ export class VoiceTranscriberPanel {
     this._update();
 
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+
+    // Re-initialize webview when panel becomes visible (fixes restore on VS Code startup)
+    this._panel.onDidChangeViewState(
+      () => {
+        if (this._panel.visible) {
+          this._update();
+        }
+      },
+      null,
+      this._disposables
+    );
 
     this._panel.webview.onDidReceiveMessage(
       (message: MessageFromWebview) => this._handleMessage(message),
@@ -109,6 +125,10 @@ export class VoiceTranscriberPanel {
 
       case 'saveAudio':
         await this._saveAudioFile(message.audioData, message.mimeType);
+        break;
+
+      case 'uploadAudio':
+        await this._handleTranscription(message.audioData, message.mimeType);
         break;
 
       case 'addToHistory':
@@ -157,27 +177,40 @@ export class VoiceTranscriberPanel {
   }
 
   private async _sendInitialData() {
+    // Send synchronous data immediately (don't block on async operations)
     const settings = this._storage.getSettings();
     const history = this._storage.getHistory();
-    const hasKey = !!(await this._storage.getApiKey());
     const session = this._storage.getRecordingSession();
 
-    // Send recording capabilities
     const capabilities: RecordingCapabilities = {
       hasNativeRecording: AudioRecorderService.isAvailable(),
       hasBrowserFallback: true,
       installInstructions: AudioRecorderService.getInstallInstructions(),
       platform: process.platform,
     };
-    this._postMessage({ type: 'recordingCapabilities', data: capabilities });
 
+    this._postMessage({ type: 'recordingCapabilities', data: capabilities });
     this._postMessage({ type: 'settingsLoaded', data: settings });
     this._postMessage({ type: 'historyLoaded', data: history });
-    this._postMessage({ type: 'apiKeyLoaded', hasKey });
     this._postMessage({ type: 'uiStateLoaded', data: this._storage.getUiState() });
 
     if (session) {
       this._postMessage({ type: 'sessionRecovery', session });
+    }
+
+    // Load API key status async (don't block UI)
+    this._loadApiKeyStatus();
+  }
+
+  private async _loadApiKeyStatus() {
+    try {
+      const hasKey = !!(await Promise.race([
+        this._storage.getApiKey(),
+        new Promise<null>(resolve => setTimeout(() => resolve(null), 3000))
+      ]));
+      this._postMessage({ type: 'apiKeyLoaded', hasKey });
+    } catch {
+      this._postMessage({ type: 'apiKeyLoaded', hasKey: false });
     }
   }
 
@@ -211,10 +244,12 @@ export class VoiceTranscriberPanel {
       this._stopRecordingTimer();
       const { buffer, mimeType } = await this._audioRecorder.stop();
 
-      this._postMessage({ type: 'recordingStopped' });
+      const audioData = buffer.toString('base64');
+
+      // Send audio to webview for download option
+      this._postMessage({ type: 'recordingStopped', audioData, mimeType });
 
       // Proceed to transcription
-      const audioData = buffer.toString('base64');
       await this._handleTranscription(audioData, mimeType);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to stop recording';
@@ -416,7 +451,14 @@ export class VoiceTranscriberPanel {
 
     <!-- Recording Section -->
     <section id="recording-section">
-      <div id="recording-status">Ready to Record</div>
+      <div id="recording-header">
+        <div id="recording-status">Ready to Record</div>
+        <button id="download-audio-btn" class="icon-button" style="display: none;" title="Download Audio">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+          </svg>
+        </button>
+      </div>
       <div id="timer">00:00:00</div>
       <div id="recording-controls">
         <button id="start-btn" class="record-btn primary" title="Start Recording">
@@ -467,6 +509,27 @@ export class VoiceTranscriberPanel {
       </header>
       <div id="transcription-content">
         <textarea id="transcription-text" readonly placeholder="Transcription will appear here..."></textarea>
+      </div>
+    </section>
+
+    <!-- Upload Audio Section -->
+    <section class="collapsible" id="upload-section">
+      <header class="section-header" data-toggle="upload-content">
+        <span class="section-icon">&#128228;</span>
+        <span>Upload Audio</span>
+        <span class="toggle-icon">&#9660;</span>
+      </header>
+      <div class="section-content collapsed" id="upload-content">
+        <div class="upload-area" id="upload-area">
+          <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.webm,audio/*" style="display: none;">
+          <label for="audio-file-input" class="upload-label">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
+            </svg>
+            <span>Click to upload audio file</span>
+            <span class="upload-formats">MP3, WAV, M4A, WebM</span>
+          </label>
+        </div>
       </div>
     </section>
 

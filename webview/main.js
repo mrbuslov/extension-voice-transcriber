@@ -3,6 +3,8 @@
 
   let currentMimeType = '';
   let lastAudioBlob = null;
+  let lastAudioData = null; // base64 audio data for download
+  let lastAudioMimeType = null;
   let isRecording = false;
   let recordingCapabilities = null;
   let uiState = {};
@@ -28,6 +30,8 @@
     resumeBtn: document.getElementById('resume-btn'),
     stopBtn: document.getElementById('stop-btn'),
     saveAudioBtn: document.getElementById('save-audio-btn'),
+    downloadAudioBtn: document.getElementById('download-audio-btn'),
+    audioFileInput: document.getElementById('audio-file-input'),
     progressContainer: document.getElementById('progress-container'),
     progressMessage: document.getElementById('progress-message'),
     transcriptionSection: document.getElementById('transcription-section'),
@@ -66,6 +70,12 @@
     elements.resumeBtn.addEventListener('click', resumeRecording);
     elements.stopBtn.addEventListener('click', stopRecording);
     elements.saveAudioBtn.addEventListener('click', saveAudio);
+    if (elements.downloadAudioBtn) {
+      elements.downloadAudioBtn.addEventListener('click', downloadAudio);
+    }
+    if (elements.audioFileInput) {
+      elements.audioFileInput.addEventListener('change', handleAudioUpload);
+    }
 
     elements.copyBtn.addEventListener('click', copyTranscription);
     elements.clearHistoryBtn.addEventListener('click', clearHistory);
@@ -193,6 +203,54 @@
     }
   }
 
+  async function downloadAudio() {
+    if (!lastAudioData) return;
+
+    try {
+      // Convert base64 to blob
+      const binaryString = atob(lastAudioData);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Create download link
+      const blob = new Blob([bytes], { type: lastAudioMimeType || 'audio/wav' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const ext = lastAudioMimeType?.includes('mp3') ? 'mp3' : 'wav';
+      a.download = `recording-${Date.now()}.${ext}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  }
+
+  function handleAudioUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      const base64 = e.target.result.split(',')[1]; // Remove data:audio/...;base64, prefix
+      vscode.postMessage({
+        type: 'uploadAudio',
+        audioData: base64,
+        mimeType: file.type || 'audio/mpeg',
+        filename: file.name,
+      });
+      showProgress(`Transcribing ${file.name}...`);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input so same file can be selected again
+    event.target.value = '';
+  }
+
   function resetRecordingUI() {
     isRecording = false;
     elements.recordingStatus.textContent = 'Ready to Record';
@@ -205,6 +263,9 @@
     elements.stopBtn.style.display = 'none';
     elements.stopBtn.disabled = false;
     elements.saveAudioBtn.style.display = 'none';
+    if (elements.downloadAudioBtn) {
+      elements.downloadAudioBtn.style.display = 'none';
+    }
   }
 
   function showProgress(message) {
@@ -449,6 +510,12 @@
 
       case 'recordingStopped':
         resetRecordingUI();
+        // Store audio data for download if provided
+        if (message.audioData && elements.downloadAudioBtn) {
+          lastAudioData = message.audioData;
+          lastAudioMimeType = message.mimeType;
+          elements.downloadAudioBtn.style.display = 'inline-flex';
+        }
         break;
 
       case 'recordingError':
@@ -496,10 +563,13 @@
         break;
 
       case 'copied':
-        elements.copyStatus.style.display = 'block';
-        setTimeout(() => {
-          elements.copyStatus.style.display = 'none';
-        }, 2000);
+        // copyStatus element is optional
+        if (elements.copyStatus) {
+          elements.copyStatus.style.display = 'block';
+          setTimeout(() => {
+            elements.copyStatus.style.display = 'none';
+          }, 2000);
+        }
         break;
 
       case 'permissionDenied':

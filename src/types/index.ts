@@ -43,7 +43,7 @@ export type MessageToWebview =
   | { type: 'uiStateLoaded'; data: Record<string, unknown> }
   | { type: 'recordingCapabilities'; data: RecordingCapabilities }
   | { type: 'recordingStarted' }
-  | { type: 'recordingStopped' }
+  | { type: 'recordingStopped'; audioData?: string; mimeType?: string }
   | { type: 'recordingError'; message: string; showBrowserFallback: boolean }
   | { type: 'recordingTime'; elapsed: number }
   | { type: 'transcriptionStart' }
@@ -68,6 +68,7 @@ export type MessageFromWebview =
   | { type: 'saveSession'; session: RecordingSession | null }
   | { type: 'copyToClipboard'; text: string }
   | { type: 'saveAudio'; audioData: string; mimeType: string }
+  | { type: 'uploadAudio'; audioData: string; mimeType: string; filename: string }
   | { type: 'addToHistory'; entry: Omit<HistoryEntry, 'id'> }
   | { type: 'clearHistory' }
   | { type: 'showError'; message: string }

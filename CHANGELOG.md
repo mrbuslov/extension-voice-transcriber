@@ -2,6 +2,17 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.4] - 2025-02-03
+
+### Added
+- Download audio button (appears after recording stops)
+- Upload audio section for transcribing existing files (MP3, WAV, M4A, WebM)
+- Tab icon for the panel
+
+### Fixed
+- Panel now loads properly on VS Code restart
+- Recording stop timeout with SIGKILL fallback for long recordings
+
 ## [0.1.3] - 2025-01-27
 
 ### Fixed
