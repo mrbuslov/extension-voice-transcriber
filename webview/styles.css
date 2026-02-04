@@ -297,6 +297,8 @@ button:disabled {
 .record-btn {
   width: 48px;
   height: 48px;
+  min-width: 48px;
+  min-height: 48px;
   border-radius: 50%;
   padding: 0;
   display: flex;
@@ -307,6 +309,7 @@ button:disabled {
   border: none;
   cursor: pointer;
   transition: background-color 0.2s ease, transform 0.1s ease;
+  flex-shrink: 0;
 }
 
 .record-btn:hover:not(:disabled) {
@@ -317,6 +320,8 @@ button:disabled {
 .record-btn.primary {
   width: 64px;
   height: 64px;
+  min-width: 64px;
+  min-height: 64px;
   background-color: var(--vscode-button-background);
   color: var(--vscode-button-foreground);
 }
@@ -615,13 +620,5 @@ button:disabled {
 @media (max-width: 400px) {
   body {
     padding: 12px;
-  }
-
-  #recording-controls {
-    flex-direction: column;
-  }
-
-  #recording-controls button {
-    width: 100%;
   }
 }

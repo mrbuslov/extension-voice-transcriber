@@ -326,7 +326,7 @@ export class VoiceTranscriberPanel {
   }
 
   private async _saveAudioFile(audioData: string, mimeType: string) {
-    const extension = mimeType.includes('mp3') ? 'mp3' : mimeType.includes('webm') ? 'webm' : 'audio';
+    const extension = mimeType.includes('mp3') ? 'mp3' : mimeType.includes('webm') ? 'webm' : 'wav';
     const defaultName = `recording_${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`;
 
     const uri = await vscode.window.showSaveDialog({

@@ -2,6 +2,13 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.6] - 2025-02-04
+
+### Fixed
+- Download audio now saves with correct file extension (.wav/.mp3/.webm)
+- Buttons no longer squish at narrow window widths
+- Improved error logging for transcription failures
+
 ## [0.1.5] - 2025-02-04
 
 ### Fixed

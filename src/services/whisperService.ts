@@ -52,21 +52,37 @@ export class WhisperService {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: formData,
-    });
+    console.log('[WhisperService] Sending request to:', url);
+    console.log('[WhisperService] Audio size:', audioBuffer.length, 'bytes');
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+    } catch (fetchError) {
+      console.error('[WhisperService] Fetch error:', fetchError);
+      console.error('[WhisperService] Error name:', (fetchError as Error).name);
+      console.error('[WhisperService] Error message:', (fetchError as Error).message);
+      console.error('[WhisperService] Error stack:', (fetchError as Error).stack);
+      throw new Error(`Network error: ${(fetchError as Error).message}`);
+    }
+
+    console.log('[WhisperService] Response status:', response.status);
 
     if (!response.ok) {
       const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
       const errorMessage =
         errorData.error?.message ||
         `Transcription failed with status ${response.status}`;
+      console.error('[WhisperService] API error:', errorMessage);
       throw new Error(errorMessage);
     }
 
     const result = (await response.json()) as { text: string };
+    console.log('[WhisperService] Transcription successful, length:', result.text.length);
     return result.text;
   }
 

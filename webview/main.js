@@ -203,31 +203,15 @@
     }
   }
 
-  async function downloadAudio() {
+  function downloadAudio() {
     if (!lastAudioData) return;
 
-    try {
-      // Convert base64 to blob
-      const binaryString = atob(lastAudioData);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-
-      // Create download link
-      const blob = new Blob([bytes], { type: lastAudioMimeType || 'audio/wav' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const ext = lastAudioMimeType?.includes('mp3') ? 'mp3' : 'wav';
-      a.download = `recording-${Date.now()}.${ext}`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Download failed:', error);
-    }
+    // Webview can't download directly due to sandbox, send to extension
+    vscode.postMessage({
+      type: 'saveAudio',
+      audioData: lastAudioData,
+      mimeType: lastAudioMimeType || 'audio/wav',
+    });
   }
 
   function handleAudioUpload(event) {
