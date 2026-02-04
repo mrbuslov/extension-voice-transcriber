@@ -50,6 +50,7 @@ export type MessageToWebview =
   | { type: 'transcriptionProgress'; message: string }
   | { type: 'transcriptionComplete'; text: string; cleaned?: string }
   | { type: 'transcriptionError'; message: string }
+  | { type: 'partialTranscription'; text: string }
   | { type: 'sessionRecovery'; session: RecordingSession }
   | { type: 'copied' }
   | { type: 'permissionDenied'; platform: string };

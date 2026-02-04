@@ -32,7 +32,6 @@ export class VoiceTranscriberPanel {
       VoiceTranscriberPanel.currentPanel._panel.reveal(column);
       return;
     }
-
     const panel = vscode.window.createWebviewPanel(
       VoiceTranscriberPanel.viewType,
       'Voice Transcriber',
@@ -71,17 +70,6 @@ export class VoiceTranscriberPanel {
     this._update();
 
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-
-    // Re-initialize webview when panel becomes visible (fixes restore on VS Code startup)
-    this._panel.onDidChangeViewState(
-      () => {
-        if (this._panel.visible) {
-          this._update();
-        }
-      },
-      null,
-      this._disposables
-    );
 
     this._panel.webview.onDidReceiveMessage(
       (message: MessageFromWebview) => this._handleMessage(message),
@@ -196,6 +184,18 @@ export class VoiceTranscriberPanel {
 
     if (session) {
       this._postMessage({ type: 'sessionRecovery', session });
+    }
+
+    // Restore recording state if recording is in progress
+    if (this._audioRecorder.getIsRecording()) {
+      this._postMessage({ type: 'recordingStarted' });
+      // Restart the timer updates
+      if (!this._recordingTimer) {
+        this._recordingTimer = setInterval(() => {
+          const elapsed = this._audioRecorder.getElapsedTime();
+          this._postMessage({ type: 'recordingTime', elapsed });
+        }, 100);
+      }
     }
 
     // Load API key status async (don't block UI)

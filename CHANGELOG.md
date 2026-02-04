@@ -2,6 +2,11 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.5] - 2025-02-04
+
+### Fixed
+- Recording state now restores correctly when webview reloads
+
 ## [0.1.4] - 2025-02-03
 
 ### Added
