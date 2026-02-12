@@ -250,9 +250,8 @@ export class AudioRecorderService {
 
       // If SIGTERM doesn't work within 5 seconds, use SIGKILL
       killTimeout = setTimeout(() => {
-        if (!resolved && !proc.killed) {
-          proc.kill('SIGKILL');
-          // Give SIGKILL 2 more seconds
+        if (!resolved) {
+          try { proc.kill('SIGKILL'); } catch {}
           setTimeout(() => {
             if (!resolved) {
               handleClose();

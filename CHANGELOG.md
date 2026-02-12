@@ -2,6 +2,15 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.7] - 2025-02-12
+
+### Fixed
+- Long recordings (3-5+ min) no longer hang on "Stopping..." - audio data is now kept in extension instead of being sent through webview postMessage which silently dropped large payloads
+- Download button now always saves the current recording, not a stale previous one
+- SIGKILL fallback now actually fires when recording process doesn't respond to SIGTERM
+- Added 15-second timeout on stop operation to prevent infinite hangs
+- Download button is now hidden when a new recording starts
+
 ## [0.1.6] - 2025-02-04
 
 ### Fixed

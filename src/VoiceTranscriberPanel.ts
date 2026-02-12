@@ -23,6 +23,8 @@ export class VoiceTranscriberPanel {
   private readonly _audioRecorder: AudioRecorderService;
   private readonly _browserRecorder: BrowserRecorderService;
   private _recordingTimer: NodeJS.Timeout | null = null;
+  private _lastAudioBuffer: Buffer | null = null;
+  private _lastAudioMimeType: string | null = null;
   private _disposables: vscode.Disposable[] = [];
 
   public static createOrShow(context: vscode.ExtensionContext) {
@@ -112,7 +114,14 @@ export class VoiceTranscriberPanel {
         break;
 
       case 'saveAudio':
-        await this._saveAudioFile(message.audioData, message.mimeType);
+        if (message.audioData) {
+          await this._saveAudioFile(message.audioData, message.mimeType);
+        } else if (this._lastAudioBuffer) {
+          await this._saveAudioFile(
+            this._lastAudioBuffer.toString('base64'),
+            this._lastAudioMimeType || 'audio/wav'
+          );
+        }
         break;
 
       case 'uploadAudio':
@@ -216,6 +225,8 @@ export class VoiceTranscriberPanel {
 
   private async _startRecording(): Promise<void> {
     try {
+      this._lastAudioBuffer = null;
+      this._lastAudioMimeType = null;
       await this._audioRecorder.start();
       this._postMessage({ type: 'recordingStarted' });
 
@@ -242,16 +253,26 @@ export class VoiceTranscriberPanel {
   private async _stopRecording(): Promise<void> {
     try {
       this._stopRecordingTimer();
-      const { buffer, mimeType } = await this._audioRecorder.stop();
 
+      const stopTimeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Recording stop timed out')), 15000)
+      );
+      const { buffer, mimeType } = await Promise.race([
+        this._audioRecorder.stop(),
+        stopTimeout,
+      ]);
+
+      this._lastAudioBuffer = buffer;
+      this._lastAudioMimeType = mimeType;
       const audioData = buffer.toString('base64');
 
-      // Send audio to webview for download option
-      this._postMessage({ type: 'recordingStopped', audioData, mimeType });
+      // Notify webview that recording stopped (no audio data — kept in extension)
+      this._postMessage({ type: 'recordingStopped' });
 
-      // Proceed to transcription
       await this._handleTranscription(audioData, mimeType);
     } catch (error) {
+      this._lastAudioBuffer = null;
+      this._lastAudioMimeType = null;
       const message = error instanceof Error ? error.message : 'Failed to stop recording';
       this._postMessage({ type: 'recordingError', message, showBrowserFallback: false });
     }
@@ -260,6 +281,8 @@ export class VoiceTranscriberPanel {
   private _cancelRecording(): void {
     this._stopRecordingTimer();
     this._audioRecorder.cancel();
+    this._lastAudioBuffer = null;
+    this._lastAudioMimeType = null;
     this._postMessage({ type: 'recordingStopped' });
   }
 

@@ -3,8 +3,7 @@
 
   let currentMimeType = '';
   let lastAudioBlob = null;
-  let lastAudioData = null; // base64 audio data for download
-  let lastAudioMimeType = null;
+  let hasAudioData = false;
   let isRecording = false;
   let recordingCapabilities = null;
   let uiState = {};
@@ -204,14 +203,8 @@
   }
 
   function downloadAudio() {
-    if (!lastAudioData) return;
-
-    // Webview can't download directly due to sandbox, send to extension
-    vscode.postMessage({
-      type: 'saveAudio',
-      audioData: lastAudioData,
-      mimeType: lastAudioMimeType || 'audio/wav',
-    });
+    if (!hasAudioData) return;
+    vscode.postMessage({ type: 'saveAudio' });
   }
 
   function handleAudioUpload(event) {
@@ -481,23 +474,25 @@
 
       case 'recordingStarted':
         isRecording = true;
+        hasAudioData = false;
         elements.recordingStatus.textContent = 'Recording...';
         elements.recordingStatus.className = 'recording';
         elements.startBtn.style.display = 'none';
         elements.startBtn.disabled = false;
-        elements.pauseBtn.style.display = 'none'; // Pause not supported with native
+        elements.pauseBtn.style.display = 'none';
         elements.stopBtn.style.display = 'inline-flex';
         elements.stopBtn.disabled = false;
         elements.saveAudioBtn.style.display = 'none';
+        if (elements.downloadAudioBtn) {
+          elements.downloadAudioBtn.style.display = 'none';
+        }
         hidePermissionError();
         break;
 
       case 'recordingStopped':
         resetRecordingUI();
-        // Store audio data for download if provided
-        if (message.audioData && elements.downloadAudioBtn) {
-          lastAudioData = message.audioData;
-          lastAudioMimeType = message.mimeType;
+        if (elements.downloadAudioBtn) {
+          hasAudioData = true;
           elements.downloadAudioBtn.style.display = 'inline-flex';
         }
         break;
