@@ -8,7 +8,7 @@ A VS Code extension that records your voice and transcribes it using OpenAI Whis
 ## Features
 
 - Record audio directly in VS Code with real-time visualization
-- Transcribe via OpenAI Whisper or your own local server
+- Transcribe via OpenAI Whisper, OpenRouter, or your own local server
 - Clean up filler words and fix punctuation with LLM (optional)
 - Keep your last 10 transcriptions
 - Auto-copy results to clipboard
@@ -47,6 +47,10 @@ choco install sox.portable
 ### OpenAI
 
 Get an API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys), select "OpenAI" as provider, paste your key, and save.
+
+### OpenRouter
+
+Select "OpenRouter" as your provider to use multimodal models (like `google/gemini-2.5-flash`) for audio transcription. Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys), paste your key, and save.
 
 ### Local server
 

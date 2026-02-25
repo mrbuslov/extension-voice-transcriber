@@ -2,6 +2,11 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.8] - 2026-02-25
+
+### Added
+- Native OpenRouter audio transcription support using multimodal models (like `google/gemini-2.5-flash`) via the `/chat/completions` endpoint
+
 ## [0.1.7] - 2025-02-12
 
 ### Fixed
