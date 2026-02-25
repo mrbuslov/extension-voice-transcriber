@@ -116,10 +116,27 @@
   }
 
   function handleProviderChange() {
-    const isOpenAI = elements.provider.value === 'openai';
-    elements.apiKeyGroup.style.display = isOpenAI ? 'block' : 'none';
-    elements.localUrlGroup.style.display = isOpenAI ? 'none' : 'block';
-    elements.cleanupGroup.style.display = isOpenAI ? 'block' : 'none';
+    const provider = elements.provider.value;
+    const isLocal = provider === 'local';
+    const isOpenAI = provider === 'openai';
+    const isOpenRouter = provider === 'openrouter';
+    
+    elements.apiKeyGroup.style.display = isLocal ? 'none' : 'block';
+    elements.localUrlGroup.style.display = isLocal ? 'block' : 'none';
+    elements.cleanupGroup.style.display = isLocal ? 'none' : 'block';
+    
+    if (provider === 'openai') {
+      elements.apiKey.placeholder = "Enter your OpenAI API key";
+      if (!elements.cleanupModel.value) {
+        elements.cleanupModel.value = "gpt-4o-mini";
+      }
+    } else if (isOpenRouter) {
+      elements.apiKey.placeholder = "Enter your OpenRouter API key";
+      if (!elements.cleanupModel.value || !elements.cleanupModel.value.includes('/')) {
+        elements.cleanupModel.value = "openai/gpt-4o-mini";
+      }
+    }
+    
     saveSettings();
   }
 

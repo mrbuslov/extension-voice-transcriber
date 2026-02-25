@@ -1,18 +1,18 @@
 import { StorageService } from './storageService';
 
 export class OpenAIService {
-  private readonly baseUrl = 'https://api.openai.com/v1';
-
   constructor(private readonly storage: StorageService) {}
 
-  async cleanupText(rawText: string, model: string = 'gpt-4o-mini'): Promise<string> {
+  async cleanupText(rawText: string, model: string, provider: 'openai' | 'openrouter' | 'local'): Promise<string> {
     const apiKey = await this.storage.getApiKey();
 
     if (!apiKey) {
-      throw new Error('OpenAI API key required for text cleanup');
+      throw new Error(`${provider === 'openai' ? 'OpenAI' : 'OpenRouter'} API key required for text cleanup`);
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+    const baseUrl = provider === 'openrouter' ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1';
+
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,

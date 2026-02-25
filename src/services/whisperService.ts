@@ -18,6 +18,10 @@ export class WhisperService {
       throw new Error('Please enter your OpenAI API key in Settings.');
     }
 
+    if (settings.provider === 'openrouter' && !apiKey) {
+      throw new Error('Please enter your OpenRouter API key in Settings.');
+    }
+
     if (audioBuffer.length > MAX_FILE_SIZE) {
       return this.transcribeChunked(audioBuffer, mimeType, settings, apiKey, onProgress);
     }
@@ -31,6 +35,10 @@ export class WhisperService {
     settings: TranscriberSettings,
     apiKey: string | undefined
   ): Promise<string> {
+    if (settings.provider === 'openrouter') {
+      return this.transcribeOpenRouter(audioBuffer, mimeType, settings, apiKey);
+    }
+
     const extension = this.getExtension(mimeType);
     const blob = new Blob([audioBuffer], { type: mimeType });
 
@@ -84,6 +92,78 @@ export class WhisperService {
     const result = (await response.json()) as { text: string };
     console.log('[WhisperService] Transcription successful, length:', result.text.length);
     return result.text;
+  }
+
+  private async transcribeOpenRouter(
+    audioBuffer: Buffer,
+    mimeType: string,
+    settings: TranscriberSettings,
+    apiKey: string | undefined
+  ): Promise<string> {
+    const url = 'https://openrouter.ai/api/v1/chat/completions';
+    const base64Audio = audioBuffer.toString('base64');
+    
+    // For webm, we use 'webm' format for Gemini compatibility. Otherwise fallback to wav/mp3
+    const format = mimeType.includes('webm') ? 'webm' : this.getExtension(mimeType);
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiKey) {
+      headers['Authorization'] = `Bearer ${apiKey}`;
+    }
+
+    const body = {
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Transcribe the spoken audio exactly. Do not add any extra text, commentary, or descriptions of sounds. Output ONLY the raw transcription. If you do not hear speech, return an empty string.'
+            },
+            {
+              type: 'input_audio',
+              input_audio: {
+                data: base64Audio,
+                format: format
+              }
+            }
+          ]
+        }
+      ]
+    };
+
+    console.log('[WhisperService] Sending OpenRouter audio request to:', url);
+    console.log('[WhisperService] Audio size:', audioBuffer.length, 'bytes');
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+      });
+    } catch (fetchError) {
+      console.error('[WhisperService] Fetch error:', fetchError);
+      throw new Error(`Network error: ${(fetchError as Error).message}`);
+    }
+
+    if (!response.ok) {
+      const errorData = (await response.json().catch(() => ({}))) as any;
+      const errorMessage =
+        errorData.error?.message ||
+        `Transcription failed with status ${response.status}`;
+      console.error('[WhisperService] API error:', errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    const result = (await response.json()) as { choices: Array<{ message: { content: string } }> };
+    const transcribedText = result.choices?.[0]?.message?.content || '';
+    
+    console.log('[WhisperService] Transcription successful, length:', transcribedText.length);
+    return transcribedText.trim();
   }
 
   private async transcribeChunked(

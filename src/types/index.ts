@@ -1,9 +1,9 @@
 export interface TranscriberSettings {
-  provider: 'openai' | 'local';
+  provider: 'openai' | 'local' | 'openrouter';
   localApiUrl: string;
   language: string;
   enableCleanup: boolean;
-  cleanupModel: 'gpt-4.1-nano' | 'gpt-4.1-mini' | 'gpt-4.1';
+  cleanupModel: string;
 }
 
 export const defaultSettings: TranscriberSettings = {
@@ -11,7 +11,7 @@ export const defaultSettings: TranscriberSettings = {
   localApiUrl: 'http://localhost:8000/v1/audio/transcriptions',
   language: '',
   enableCleanup: false,
-  cleanupModel: 'gpt-4.1-nano',
+  cleanupModel: 'gpt-4o-mini',
 };
 
 export interface HistoryEntry {

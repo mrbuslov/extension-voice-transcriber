@@ -325,10 +325,10 @@ export class VoiceTranscriberPanel {
 
       let cleanedText: string | undefined;
 
-      if (settings.enableCleanup && settings.provider === 'openai') {
+      if (settings.enableCleanup && (settings.provider === 'openai' || settings.provider === 'openrouter')) {
         this._postMessage({ type: 'transcriptionProgress', message: 'Cleaning up text...' });
         try {
-          cleanedText = await this._openai.cleanupText(rawText, settings.cleanupModel);
+          cleanedText = await this._openai.cleanupText(rawText, settings.cleanupModel, settings.provider);
         } catch {
           vscode.window.showWarningMessage('Text cleanup failed. Showing original transcription.');
         }
@@ -413,6 +413,7 @@ export class VoiceTranscriberPanel {
           <label for="provider">Provider</label>
           <select id="provider">
             <option value="openai">OpenAI</option>
+            <option value="openrouter">OpenRouter</option>
             <option value="local">Local/Custom</option>
           </select>
         </div>
@@ -420,7 +421,7 @@ export class VoiceTranscriberPanel {
         <div class="form-group" id="api-key-group">
           <label for="api-key">API Key</label>
           <div class="api-key-row">
-            <input type="password" id="api-key" placeholder="Enter your OpenAI API key">
+            <input type="password" id="api-key" placeholder="Enter your API key">
             <button id="toggle-api-key" class="icon-button" title="Show/Hide">&#128065;</button>
             <button id="save-api-key" class="icon-button" title="Save">&#128190;</button>
           </div>
@@ -444,11 +445,7 @@ export class VoiceTranscriberPanel {
           <summary>Advanced Settings</summary>
           <div class="form-group" id="cleanup-model-group">
             <label for="cleanup-model">LLM Model</label>
-            <select id="cleanup-model">
-              <option value="gpt-4.1-nano">gpt-4.1-nano (default)</option>
-              <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-              <option value="gpt-4.1">gpt-4.1</option>
-            </select>
+            <input type="text" id="cleanup-model" placeholder="e.g. gpt-4o-mini, anthropic/claude-3-haiku">
           </div>
           <div class="form-group">
             <label for="language">Language</label>
