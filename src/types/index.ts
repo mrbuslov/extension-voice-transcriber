@@ -68,6 +68,7 @@ export type MessageFromWebview =
   | { type: 'transcribe'; audioData: string; mimeType: string }
   | { type: 'saveSession'; session: RecordingSession | null }
   | { type: 'copyToClipboard'; text: string }
+  | { type: 'insertToEditor'; text: string }
   | { type: 'saveAudio'; audioData: string; mimeType: string }
   | { type: 'uploadAudio'; audioData: string; mimeType: string; filename: string }
   | { type: 'addToHistory'; entry: Omit<HistoryEntry, 'id'> }

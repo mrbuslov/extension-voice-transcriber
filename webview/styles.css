@@ -455,6 +455,22 @@ button:disabled {
   display: block;
 }
 
+.section-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+#edit-toggle-btn {
+  opacity: 0.5;
+}
+
+#edit-toggle-btn.active {
+  opacity: 1;
+  color: var(--vscode-textLink-foreground);
+}
+
 #transcription-content {
   padding: 16px;
 }
@@ -464,6 +480,11 @@ button:disabled {
   min-height: 150px;
   resize: vertical;
   line-height: 1.6;
+}
+
+#transcription-text[readonly] {
+  opacity: 0.85;
+  cursor: default;
 }
 
 #copy-status {

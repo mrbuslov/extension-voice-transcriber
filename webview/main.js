@@ -35,6 +35,8 @@
     progressMessage: document.getElementById('progress-message'),
     transcriptionSection: document.getElementById('transcription-section'),
     transcriptionText: document.getElementById('transcription-text'),
+    editToggleBtn: document.getElementById('edit-toggle-btn'),
+    insertBtn: document.getElementById('insert-btn'),
     copyBtn: document.getElementById('copy-btn'),
     historyList: document.getElementById('history-list'),
     clearHistoryBtn: document.getElementById('clear-history-btn'),
@@ -76,6 +78,8 @@
       elements.audioFileInput.addEventListener('change', handleAudioUpload);
     }
 
+    elements.editToggleBtn.addEventListener('click', toggleEditMode);
+    elements.insertBtn.addEventListener('click', insertToEditor);
     elements.copyBtn.addEventListener('click', copyTranscription);
     elements.clearHistoryBtn.addEventListener('click', clearHistory);
 
@@ -257,6 +261,27 @@
   }
 
   
+  function toggleEditMode() {
+    const textarea = elements.transcriptionText;
+    const btn = elements.editToggleBtn;
+    const isEditable = !textarea.readOnly;
+
+    textarea.readOnly = isEditable;
+    btn.classList.toggle('active', !isEditable);
+    btn.title = isEditable ? 'Edit transcription' : 'Lock transcription';
+
+    if (!isEditable) {
+      textarea.focus();
+    }
+  }
+
+  function insertToEditor() {
+    const text = elements.transcriptionText.value;
+    if (text) {
+      vscode.postMessage({ type: 'insertToEditor', text });
+    }
+  }
+
   function copyTranscription() {
     const text = elements.transcriptionText.value;
     if (text) {

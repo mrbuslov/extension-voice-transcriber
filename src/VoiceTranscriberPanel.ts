@@ -113,6 +113,22 @@ export class VoiceTranscriberPanel {
         this._postMessage({ type: 'copied' });
         break;
 
+      case 'insertToEditor': {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+          await editor.edit(editBuilder => {
+            if (editor.selection.isEmpty) {
+              editBuilder.insert(editor.selection.active, message.text);
+            } else {
+              editBuilder.replace(editor.selection, message.text);
+            }
+          });
+        } else {
+          vscode.window.showInformationMessage('Open a file first to insert transcription');
+        }
+        break;
+      }
+
       case 'saveAudio':
         if (message.audioData) {
           await this._saveAudioFile(message.audioData, message.mimeType);
@@ -528,10 +544,22 @@ export class VoiceTranscriberPanel {
       <header class="section-header">
         <span class="section-icon">&#128221;</span>
         <span>Transcription</span>
-        <button id="copy-btn" class="icon-button" title="Copy to clipboard">&#128203;</button>
+        <div class="section-header-actions">
+          <button id="edit-toggle-btn" class="icon-button active" title="Edit transcription">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+            </svg>
+          </button>
+          <button id="insert-btn" class="icon-button" title="Insert text into active file">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
+            </svg>
+          </button>
+          <button id="copy-btn" class="icon-button" title="Copy text to clipboard">&#128203;</button>
+        </div>
       </header>
       <div id="transcription-content">
-        <textarea id="transcription-text" readonly placeholder="Transcription will appear here..."></textarea>
+        <textarea id="transcription-text" placeholder="Transcription will appear here..."></textarea>
       </div>
     </section>
 
