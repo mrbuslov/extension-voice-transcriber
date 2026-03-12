@@ -2,6 +2,13 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.9] - 2025-03-12
+
+### Added
+- Editable transcription - edit text directly after transcription (toggle between edit and read-only mode)
+- Insert to Editor button - insert transcription text at cursor position in active file
+- Tooltips on all transcription action buttons
+
 ## [0.1.7] - 2025-02-12
 
 ### Fixed
