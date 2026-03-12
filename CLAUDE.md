@@ -2,7 +2,7 @@
 
 ## Before EVERY release (non-negotiable)
 
-1. Update `changelog.md` with new version entry
+1. Update BOTH `CHANGELOG.md` and `changelog.md` (two separate files exist!)
 2. Bump version in `package.json`
 3. Run `npm run compile` - must pass clean
 4. Commit and push to GitHub
