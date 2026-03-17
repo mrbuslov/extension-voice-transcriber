@@ -2,6 +2,13 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.10] - 2026-03-17
+
+### Fixed
+- Long recordings (3+ min) no longer truncate - fixed pipe buffer deadlock that caused sox to stop capturing audio
+- Recording stop is now faster and more reliable (SIGINT instead of SIGTERM)
+- Added WAV duration logging for diagnostics
+
 ## [0.1.9] - 2025-03-12
 
 ### Added

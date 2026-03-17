@@ -282,6 +282,12 @@ export class VoiceTranscriberPanel {
       this._lastAudioMimeType = mimeType;
       const audioData = buffer.toString('base64');
 
+      // Log WAV duration for diagnostics (16kHz, 16-bit mono = 32000 bytes/sec, minus 44-byte header)
+      const wavHeaderSize = 44;
+      const bytesPerSecond = 16000 * 2; // 16kHz * 16-bit
+      const audioDurationSec = Math.max(0, (buffer.length - wavHeaderSize) / bytesPerSecond);
+      console.log(`[VoiceTranscriber] WAV file: ${buffer.length} bytes, ~${audioDurationSec.toFixed(1)}s duration`);
+
       // Notify webview that recording stopped (no audio data — kept in extension)
       this._postMessage({ type: 'recordingStopped' });
 

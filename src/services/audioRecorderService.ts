@@ -180,7 +180,7 @@ export class AudioRecorderService {
     return new Promise((resolve, reject) => {
       try {
         this.process = spawn(toolInfo.command, args, {
-          stdio: ['ignore', 'pipe', 'pipe']
+          stdio: ['ignore', 'ignore', 'ignore']
         });
 
         this.process.on('error', (err) => {
@@ -245,8 +245,10 @@ export class AudioRecorderService {
         reject(err);
       });
 
-      // Send SIGTERM first (graceful)
-      proc.kill('SIGTERM');
+      // Send SIGINT (Ctrl+C) — sox/rec handles this as the standard stop signal,
+      // properly flushing all internal audio buffers and updating the WAV header.
+      // SIGTERM may cause sox to skip buffer flush, losing the last seconds of audio.
+      proc.kill('SIGINT');
 
       // If SIGTERM doesn't work within 5 seconds, use SIGKILL
       killTimeout = setTimeout(() => {
