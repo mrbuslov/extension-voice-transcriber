@@ -371,7 +371,12 @@ export class VoiceTranscriberPanel {
   }
 
   private async _saveAudioFile(audioData: string, mimeType: string) {
-    const extension = mimeType.includes('mp3') ? 'mp3' : mimeType.includes('webm') ? 'webm' : 'wav';
+    const extension = mimeType.includes('mp3') || mimeType.includes('mpeg') ? 'mp3'
+      : mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a'
+      : mimeType.includes('webm') ? 'webm'
+      : mimeType.includes('ogg') ? 'ogg'
+      : mimeType.includes('flac') ? 'flac'
+      : 'wav';
     const defaultName = `recording_${new Date().toISOString().replace(/[:.]/g, '-')}.${extension}`;
 
     const uri = await vscode.window.showSaveDialog({
@@ -578,13 +583,13 @@ export class VoiceTranscriberPanel {
       </header>
       <div class="section-content collapsed" id="upload-content">
         <div class="upload-area" id="upload-area">
-          <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.webm,audio/*" style="display: none;">
+          <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.mp4,.webm,.ogg,.oga,.flac,audio/*" style="display: none;">
           <label for="audio-file-input" class="upload-label">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
             </svg>
             <span>Click to upload audio file</span>
-            <span class="upload-formats">MP3, WAV, M4A, WebM</span>
+            <span class="upload-formats">MP3, WAV, M4A, WebM, OGG, FLAC</span>
           </label>
         </div>
       </div>

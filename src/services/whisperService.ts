@@ -122,18 +122,12 @@ export class WhisperService {
   }
 
   private getExtension(mimeType: string): string {
-    if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
-      return 'mp3';
-    }
-    if (mimeType.includes('webm')) {
-      return 'webm';
-    }
-    if (mimeType.includes('wav')) {
-      return 'wav';
-    }
-    if (mimeType.includes('ogg')) {
-      return 'ogg';
-    }
-    return 'mp3';
+    if (mimeType.includes('wav')) return 'wav';
+    if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
+    if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'm4a';
+    if (mimeType.includes('webm')) return 'webm';
+    if (mimeType.includes('ogg')) return 'ogg';
+    if (mimeType.includes('flac')) return 'flac';
+    throw new Error(`Unsupported audio format: ${mimeType}. Supported: wav, mp3, m4a, webm, ogg, flac`);
   }
 }

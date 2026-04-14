@@ -2,6 +2,13 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [0.1.11] - 2026-04-14
+
+### Fixed
+- Uploading M4A/MP4/OGG/FLAC files now works correctly (was rejected by Whisper API due to wrong file extension)
+- Unknown audio formats now raise a clear error instead of silently sending as MP3
+- Save audio dialog now uses correct file extension for all formats
+
 ## [0.1.10] - 2026-03-17
 
 ### Fixed

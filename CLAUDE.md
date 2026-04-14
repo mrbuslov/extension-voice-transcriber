@@ -33,6 +33,10 @@ PAT is stored in `.env` file. Never commit `.env`.
 4. If new message type needed - add to `MessageFromWebview` or `MessageToWebview` in `src/types/index.ts`
 5. Handle message in `_handleMessage()` in `VoiceTranscriberPanel.ts`
 
+## After EVERY code change to .ts files
+
+Run `npm run compile` immediately after editing any TypeScript file. Do NOT wait for the user to ask. This is mandatory — the extension runs compiled JS from `out/`, not source TS.
+
 ## Testing
 
 No automated tests. Test manually in Extension Development Host (F5).
