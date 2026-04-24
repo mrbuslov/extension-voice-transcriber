@@ -254,14 +254,22 @@ export class VoiceTranscriberPanel {
     } catch (error) {
       this._stopRecordingTimer();
       const message = error instanceof Error ? error.message : 'Failed to start recording';
-      const isToolMissing = message === 'NO_RECORDING_TOOL';
+
+      let displayMessage = message;
+      let showBrowserFallback = false;
+
+      if (message === 'NO_RECORDING_TOOL') {
+        displayMessage = `Recording requires ffmpeg.\n\nInstall it with:\n${AudioRecorderService.getInstallInstructions()}`;
+        showBrowserFallback = true;
+      } else if (message === 'NO_MIC_DEVICE') {
+        displayMessage = 'Microphone not available. Check OS microphone permissions for VS Code.';
+        showBrowserFallback = true;
+      }
 
       this._postMessage({
         type: 'recordingError',
-        message: isToolMissing
-          ? `Recording tools not installed.\n\n${AudioRecorderService.getInstallInstructions()}`
-          : message,
-        showBrowserFallback: isToolMissing,
+        message: displayMessage,
+        showBrowserFallback,
       });
     }
   }
@@ -341,8 +349,8 @@ export class VoiceTranscriberPanel {
 
       this._postMessage({ type: 'transcriptionProgress', message: 'Transcribing audio...' });
 
-      const rawText = await this._whisper.transcribe(audioBuffer, mimeType, settings, (progress) => {
-        this._postMessage({ type: 'transcriptionProgress', message: progress });
+      const rawText = await this._whisper.transcribe(audioBuffer, mimeType, settings, (message, progress) => {
+        this._postMessage({ type: 'transcriptionProgress', message, progress });
       });
 
       let cleanedText: string | undefined;
@@ -539,8 +547,13 @@ export class VoiceTranscriberPanel {
         </button>
       </div>
       <div id="progress-container" style="display: none;">
-        <div class="spinner"></div>
-        <span id="progress-message">Processing...</span>
+        <div class="progress-header">
+          <div class="spinner"></div>
+          <span id="progress-message">Processing...</span>
+        </div>
+        <div id="progress-bar" class="progress-bar" style="display: none;">
+          <div id="progress-bar-fill" class="progress-bar-fill"></div>
+        </div>
       </div>
       <div id="permission-error" class="permission-error" style="display: none;">
         <div class="permission-error-icon">&#9888;</div>
@@ -583,13 +596,13 @@ export class VoiceTranscriberPanel {
       </header>
       <div class="section-content collapsed" id="upload-content">
         <div class="upload-area" id="upload-area">
-          <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.mp4,.webm,.ogg,.oga,.flac,audio/*" style="display: none;">
+          <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.mp4,.webm,.ogg,.oga,.flac,.mkv,.mov,.avi,audio/*,video/*" style="display: none;">
           <label for="audio-file-input" class="upload-label">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
             </svg>
             <span>Click to upload audio file</span>
-            <span class="upload-formats">MP3, WAV, M4A, WebM, OGG, FLAC</span>
+            <span class="upload-formats">Audio: MP3, WAV, M4A, WebM, OGG, FLAC &nbsp;&middot;&nbsp; Video: MP4, MKV, MOV, AVI</span>
           </label>
         </div>
       </div>

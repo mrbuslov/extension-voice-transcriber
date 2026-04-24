@@ -1,7 +1,17 @@
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { StorageService } from './storageService';
 import { TranscriberSettings } from '../types';
+import { isFfmpegAvailable, runFfmpeg } from './ffmpeg';
 
 const MAX_FILE_SIZE = 24 * 1024 * 1024; // 24MB (leaving margin for 25MB limit)
+const CHUNK_SECONDS = 600; // 10 minutes per chunk
+const CHUNK_BITRATE = '128k';
+const MAX_PARALLEL_CHUNKS = 20;
+const MAX_RETRIES = 5;
+const BASE_RETRY_DELAY_MS = 1000;
+const REQUEST_TIMEOUT_MS = 60_000; // 1 min — fail fast on stuck connections, retry will handle legit slowness
 
 export class WhisperService {
   constructor(private readonly storage: StorageService) {}
@@ -10,7 +20,7 @@ export class WhisperService {
     audioBuffer: Buffer,
     mimeType: string,
     settings: TranscriberSettings,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string, progress?: number) => void
   ): Promise<string> {
     const apiKey = await this.storage.getApiKey();
 
@@ -18,29 +28,31 @@ export class WhisperService {
       throw new Error('Please enter your OpenAI API key in Settings.');
     }
 
-    if (audioBuffer.length > MAX_FILE_SIZE) {
-      return this.transcribeChunked(audioBuffer, mimeType, settings, apiKey, onProgress);
+    // Fast path: small file in a format Whisper already supports
+    if (audioBuffer.length <= MAX_FILE_SIZE && isWhisperCompatible(mimeType)) {
+      return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey);
     }
 
-    return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey);
+    // Either too big, a video, or a format we can't send directly — route through ffmpeg
+    if (!isFfmpegAvailable()) {
+      if (audioBuffer.length > MAX_FILE_SIZE) {
+        throw new Error('Files over 24 MB require ffmpeg for chunking. Install ffmpeg to process this file.');
+      }
+      // Small but weird format — try sending as-is (Whisper will reject if truly unsupported)
+      return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey);
+    }
+
+    return this.transcribeViaFfmpeg(audioBuffer, mimeType, settings, apiKey, onProgress);
   }
 
   private async transcribeSingle(
     audioBuffer: Buffer,
     mimeType: string,
     settings: TranscriberSettings,
-    apiKey: string | undefined
+    apiKey: string | undefined,
+    label: string = 'audio'
   ): Promise<string> {
-    const extension = this.getExtension(mimeType);
-    const blob = new Blob([audioBuffer], { type: mimeType });
-
-    const formData = new FormData();
-    formData.append('file', blob, `audio.${extension}`);
-    formData.append('model', 'whisper-1');
-
-    if (settings.language) {
-      formData.append('language', settings.language);
-    }
+    const extension = getExtension(mimeType);
 
     const url =
       settings.provider === 'openai'
@@ -52,82 +64,243 @@ export class WhisperService {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    console.log('[WhisperService] Sending request to:', url);
-    console.log('[WhisperService] Audio size:', audioBuffer.length, 'bytes');
+    console.log(`[WhisperService:${label}] Sending ${audioBuffer.length} bytes to ${url}`);
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-    } catch (fetchError) {
-      console.error('[WhisperService] Fetch error:', fetchError);
-      console.error('[WhisperService] Error name:', (fetchError as Error).name);
-      console.error('[WhisperService] Error message:', (fetchError as Error).message);
-      console.error('[WhisperService] Error stack:', (fetchError as Error).stack);
-      throw new Error(`Network error: ${(fetchError as Error).message}`);
-    }
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      // Build fresh FormData per attempt - Blob + FormData aren't reliably reusable
+      const blob = new Blob([audioBuffer], { type: mimeType });
+      const formData = new FormData();
+      formData.append('file', blob, `audio.${extension}`);
+      formData.append('model', 'whisper-1');
+      if (settings.language) {
+        formData.append('language', settings.language);
+      }
 
-    console.log('[WhisperService] Response status:', response.status);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const startedAt = Date.now();
 
-    if (!response.ok) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: formData,
+          signal: controller.signal,
+        });
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        const err = fetchError as Error;
+        const elapsed = Date.now() - startedAt;
+        const isTimeout = err.name === 'AbortError' || elapsed >= REQUEST_TIMEOUT_MS - 100;
+        const reason = isTimeout ? `timeout after ${elapsed}ms` : err.message;
+        console.error(`[WhisperService:${label}] Fetch error (attempt ${attempt + 1}): ${reason}`);
+        if (attempt < MAX_RETRIES) {
+          await sleep(backoffDelay(attempt));
+          continue;
+        }
+        throw new Error(isTimeout ? `Request timed out after ${REQUEST_TIMEOUT_MS}ms` : `Network error: ${err.message}`);
+      }
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        const result = (await response.json()) as { text: string };
+        console.log(`[WhisperService:${label}] Success in ${Date.now() - startedAt}ms, ${result.text.length} chars`);
+        return result.text;
+      }
+
       const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
       const errorMessage =
         errorData.error?.message ||
         `Transcription failed with status ${response.status}`;
-      console.error('[WhisperService] API error:', errorMessage);
+
+      const isRetryable = response.status === 429 || response.status >= 500;
+      if (isRetryable && attempt < MAX_RETRIES) {
+        const retryAfter = parseRetryAfter(response.headers.get('retry-after'));
+        const delay = retryAfter ?? backoffDelay(attempt);
+        console.warn(`[WhisperService:${label}] ${response.status} (attempt ${attempt + 1}), retrying in ${delay}ms: ${errorMessage}`);
+        await sleep(delay);
+        continue;
+      }
+
+      console.error(`[WhisperService:${label}] API error:`, errorMessage);
       throw new Error(errorMessage);
     }
 
-    const result = (await response.json()) as { text: string };
-    console.log('[WhisperService] Transcription successful, length:', result.text.length);
-    return result.text;
+    throw new Error('Transcription failed after maximum retries');
   }
 
-  private async transcribeChunked(
+  private async transcribeViaFfmpeg(
     audioBuffer: Buffer,
     mimeType: string,
     settings: TranscriberSettings,
     apiKey: string | undefined,
-    onProgress?: (message: string) => void
+    onProgress?: (message: string, progress?: number) => void
   ): Promise<string> {
-    const chunks = this.splitBuffer(audioBuffer, MAX_FILE_SIZE);
-    const transcriptions: string[] = [];
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-transcriber-chunks-'));
+    const inputExt = getExtension(mimeType) || 'bin';
+    const inputPath = path.join(workDir, `input.${inputExt}`);
+    const transcodedPath = path.join(workDir, 'audio.mp3');
 
-    for (let i = 0; i < chunks.length; i++) {
-      if (onProgress) {
-        onProgress(`Processing chunk ${i + 1}/${chunks.length}...`);
+    try {
+      fs.writeFileSync(inputPath, audioBuffer);
+
+      if (onProgress) onProgress('Extracting audio...');
+
+      // Stage 1: transcode to MP3 (strips video, normalizes format)
+      await runFfmpeg(
+        [
+          '-hide_banner',
+          '-loglevel', 'error',
+          '-i', inputPath,
+          '-vn',
+          '-acodec', 'libmp3lame',
+          '-b:a', CHUNK_BITRATE,
+          '-ar', '16000',
+          '-ac', '1',
+          '-y',
+          transcodedPath,
+        ],
+        { captureStderr: true }
+      );
+
+      const transcodedSize = fs.statSync(transcodedPath).size;
+      const transcodedBuffer = fs.readFileSync(transcodedPath);
+
+      // Single-chunk fast path: whole transcoded file fits in one request
+      if (transcodedSize <= MAX_FILE_SIZE) {
+        if (onProgress) onProgress('Transcribing audio...');
+        return this.transcribeSingle(transcodedBuffer, 'audio/mpeg', settings, apiKey, 'single');
       }
 
-      const text = await this.transcribeSingle(chunks[i], mimeType, settings, apiKey);
-      transcriptions.push(text);
+      // Stage 2: split into time-based chunks
+      if (onProgress) onProgress('Splitting audio into chunks...', 0);
+      const chunkPattern = path.join(workDir, 'chunk-%03d.mp3');
+      await runFfmpeg(
+        [
+          '-hide_banner',
+          '-loglevel', 'error',
+          '-i', transcodedPath,
+          '-f', 'segment',
+          '-segment_time', String(CHUNK_SECONDS),
+          '-c', 'copy',
+          '-y',
+          chunkPattern,
+        ],
+        { captureStderr: true }
+      );
+
+      const chunkFiles = fs
+        .readdirSync(workDir)
+        .filter((name) => /^chunk-\d{3}\.mp3$/.test(name))
+        .sort();
+
+      if (chunkFiles.length === 0) {
+        throw new Error('ffmpeg produced no chunks');
+      }
+
+      // Stage 3: transcribe chunks in parallel (bounded concurrency)
+      const total = chunkFiles.length;
+      let completed = 0;
+      if (onProgress) onProgress(`Transcribing ${total} chunks in parallel...`, 0);
+
+      const results = await this.mapWithConcurrency(
+        chunkFiles,
+        MAX_PARALLEL_CHUNKS,
+        async (name, idx) => {
+          const chunkBuffer = fs.readFileSync(path.join(workDir, name));
+          const text = await this.transcribeSingle(
+            chunkBuffer,
+            'audio/mpeg',
+            settings,
+            apiKey,
+            `chunk-${idx + 1}/${total}`
+          );
+          completed++;
+          if (onProgress) {
+            onProgress(`Transcribed ${completed}/${total} chunks...`, completed / total);
+          }
+          return text;
+        }
+      );
+
+      return results.join(' ');
+    } finally {
+      // Best-effort cleanup
+      try {
+        for (const name of fs.readdirSync(workDir)) {
+          try { fs.unlinkSync(path.join(workDir, name)); } catch {}
+        }
+        fs.rmdirSync(workDir);
+      } catch {}
     }
-
-    return transcriptions.join(' ');
   }
 
-  private splitBuffer(buffer: Buffer, chunkSize: number): Buffer[] {
-    const chunks: Buffer[] = [];
-    let offset = 0;
+  private async mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    fn: (item: T, index: number) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let nextIndex = 0;
 
-    while (offset < buffer.length) {
-      const end = Math.min(offset + chunkSize, buffer.length);
-      chunks.push(buffer.subarray(offset, end));
-      offset = end;
-    }
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const idx = nextIndex++;
+        if (idx >= items.length) return;
+        results[idx] = await fn(items[idx], idx);
+      }
+    };
 
-    return chunks;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, () => worker());
+    await Promise.all(workers);
+    return results;
   }
+}
 
-  private getExtension(mimeType: string): string {
-    if (mimeType.includes('wav')) return 'wav';
-    if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
-    if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'm4a';
-    if (mimeType.includes('webm')) return 'webm';
-    if (mimeType.includes('ogg')) return 'ogg';
-    if (mimeType.includes('flac')) return 'flac';
-    throw new Error(`Unsupported audio format: ${mimeType}. Supported: wav, mp3, m4a, webm, ogg, flac`);
-  }
+function getExtension(mimeType: string): string {
+  if (mimeType.includes('wav')) return 'wav';
+  if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
+  if (mimeType.includes('mp4') || mimeType.includes('m4a')) return 'm4a';
+  if (mimeType.includes('webm')) return 'webm';
+  if (mimeType.includes('ogg')) return 'ogg';
+  if (mimeType.includes('flac')) return 'flac';
+  if (mimeType.includes('mkv') || mimeType.includes('matroska')) return 'mkv';
+  if (mimeType.includes('quicktime') || mimeType.includes('mov')) return 'mov';
+  if (mimeType.includes('avi')) return 'avi';
+  throw new Error(`Unsupported audio format: ${mimeType}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function backoffDelay(attempt: number): number {
+  // Exponential backoff with jitter: 1s, 2s, 4s, 8s, 16s (+ up to 500ms jitter)
+  const base = BASE_RETRY_DELAY_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 500;
+  return Math.min(base + jitter, 30000);
+}
+
+function parseRetryAfter(header: string | null): number | null {
+  if (!header) return null;
+  const seconds = Number(header);
+  if (!isNaN(seconds)) return Math.min(seconds * 1000, 30000);
+  const date = Date.parse(header);
+  if (!isNaN(date)) return Math.max(0, Math.min(date - Date.now(), 30000));
+  return null;
+}
+
+function isWhisperCompatible(mimeType: string): boolean {
+  // Formats Whisper API accepts directly (no ffmpeg needed):
+  // flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
+  const m = mimeType.toLowerCase();
+  return (
+    m.includes('wav') ||
+    m.includes('mp3') || m.includes('mpeg') || m.includes('mpga') ||
+    m.includes('m4a') || m.includes('mp4') ||
+    m.includes('webm') ||
+    m.includes('ogg') || m.includes('oga') ||
+    m.includes('flac')
+  );
 }

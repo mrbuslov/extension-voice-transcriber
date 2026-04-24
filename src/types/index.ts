@@ -47,7 +47,7 @@ export type MessageToWebview =
   | { type: 'recordingError'; message: string; showBrowserFallback: boolean }
   | { type: 'recordingTime'; elapsed: number }
   | { type: 'transcriptionStart' }
-  | { type: 'transcriptionProgress'; message: string }
+  | { type: 'transcriptionProgress'; message: string; progress?: number }
   | { type: 'transcriptionComplete'; text: string; cleaned?: string }
   | { type: 'transcriptionError'; message: string }
   | { type: 'partialTranscription'; text: string }

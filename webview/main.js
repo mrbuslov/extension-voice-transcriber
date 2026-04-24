@@ -33,6 +33,8 @@
     audioFileInput: document.getElementById('audio-file-input'),
     progressContainer: document.getElementById('progress-container'),
     progressMessage: document.getElementById('progress-message'),
+    progressBar: document.getElementById('progress-bar'),
+    progressBarFill: document.getElementById('progress-bar-fill'),
     transcriptionSection: document.getElementById('transcription-section'),
     transcriptionText: document.getElementById('transcription-text'),
     editToggleBtn: document.getElementById('edit-toggle-btn'),
@@ -249,15 +251,29 @@
     }
   }
 
-  function showProgress(message) {
+  function showProgress(message, progress) {
     elements.progressContainer.style.display = 'flex';
     elements.progressMessage.textContent = message;
     elements.startBtn.disabled = true;
+
+    if (elements.progressBar && elements.progressBarFill) {
+      if (typeof progress === 'number' && progress >= 0 && progress <= 1) {
+        elements.progressBar.style.display = 'block';
+        elements.progressBarFill.style.width = (progress * 100).toFixed(1) + '%';
+      } else {
+        elements.progressBar.style.display = 'none';
+        elements.progressBarFill.style.width = '0%';
+      }
+    }
   }
 
   function hideProgress() {
     elements.progressContainer.style.display = 'none';
     elements.startBtn.disabled = false;
+    if (elements.progressBar && elements.progressBarFill) {
+      elements.progressBar.style.display = 'none';
+      elements.progressBarFill.style.width = '0%';
+    }
   }
 
   
@@ -536,7 +552,7 @@
         break;
 
       case 'transcriptionProgress':
-        showProgress(message.message);
+        showProgress(message.message, message.progress);
         break;
 
       case 'transcriptionComplete':

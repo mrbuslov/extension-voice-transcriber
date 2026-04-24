@@ -2,6 +2,33 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.0.0] - 2026-04-24
+
+### Breaking
+- Recording now requires **ffmpeg** instead of sox/arecord. Existing users must install ffmpeg:
+  - macOS:   `brew install ffmpeg`
+  - Linux:   `sudo apt install ffmpeg`
+  - Windows: `winget install ffmpeg`
+  Browser-based recording still works with no install required.
+
+### Added
+- **Video file upload** (MP4, MKV, MOV, AVI, WebM) — audio track is extracted automatically
+- **Proper chunking for long files** — uploads over 24 MB are transcoded to 128 kbps MP3 and split into 10-minute chunks. A 1-hour recording now transcribes correctly instead of failing with "Invalid file format"
+- **Parallel chunk transcription** — up to 20 chunks transcribed in parallel (a 1-hour recording now finishes in the time of one API request, not six)
+- **Progress bar** — visual bar fills as chunks complete, with live "Transcribed N/M chunks..." status
+- **Automatic retry** — 429 (rate limit) and 5xx errors retry with exponential backoff (up to 5 attempts), respecting the `Retry-After` header when provided
+- **Request timeout** — each Whisper request aborts and retries after 60s to avoid hanging indefinitely on stuck connections
+- Clearer error when microphone is unavailable (vs. ffmpeg missing)
+- ffmpeg stderr is captured and surfaced on recording failures
+
+### Changed
+- Single recording tool across all platforms: macOS, Linux, and Windows all use ffmpeg
+- Linux recording defaults to PulseAudio/PipeWire; falls back to ALSA if Pulse not available
+- Windows auto-detects first audio input device via DirectShow
+
+### Migration
+If you had sox or arecord installed only for this extension, you can uninstall them after installing ffmpeg. The extension no longer uses sox, rec, or arecord.
+
 ## [0.1.11] - 2026-04-14
 
 ### Fixed

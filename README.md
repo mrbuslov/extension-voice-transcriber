@@ -8,31 +8,33 @@ A VS Code extension that records your voice and transcribes it using OpenAI Whis
 ## Features
 
 - Record audio directly in VS Code with real-time visualization
+- Upload audio or video files — audio track is extracted automatically (MP4, MKV, MOV, AVI, WebM)
+- Transcribe long recordings (1hr+) — split into 10-min chunks behind the scenes
 - Transcribe via OpenAI Whisper or your own local server
 - Clean up filler words and fix punctuation with LLM (optional)
 - Keep your last 10 transcriptions
 - Auto-copy results to clipboard
 - Recover recordings if VS Code crashes
 
-## Recording tools Installation (recommended)
+## ffmpeg Installation (required for native recording and long files)
 
-The extension works best with audio utilities installed. Without them, it falls back to browser-based recording.
-
-**Linux:**
-```bash
-sudo apt install alsa-utils
-# or
-sudo apt install sox libsox-fmt-all
-```
+The extension uses ffmpeg for native recording, splitting long files, and extracting audio from video uploads. Without ffmpeg, recording falls back to the browser (works, but lower quality and no long-file support).
 
 **macOS:**
 ```bash
-brew install sox
+brew install ffmpeg
+```
+
+**Linux:**
+```bash
+sudo apt install ffmpeg
 ```
 
 **Windows:**
 ```bash
-choco install sox.portable
+winget install ffmpeg
+# or
+choco install ffmpeg
 ```
 
 ## Usage
@@ -87,9 +89,9 @@ Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → "Developer: Open Webview De
 - For local API — make sure the server is running and URL is correct
 - Check your internet connection
 
-### Large files
+### Large files and video uploads
 
-Recordings over 25MB are automatically split into chunks.
+Recordings over 24 MB are transcoded to 128 kbps MP3 and split into 10-minute chunks, each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
 
 ## Privacy
 

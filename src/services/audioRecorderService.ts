@@ -1,130 +1,77 @@
-import { spawn, ChildProcess, execSync } from 'child_process';
+import { spawn, ChildProcess } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-
-export type RecordingTool = 'sox' | 'arecord' | 'auto';
-
-export interface RecordingToolInfo {
-  tool: RecordingTool;
-  command: string;
-  available: boolean;
-}
+import {
+  getFfmpegPath,
+  isFfmpegAvailable,
+  getInstallInstructions as getFfmpegInstallInstructions,
+  detectWindowsAudioDevice,
+  detectLinuxAudioBackend,
+} from './ffmpeg';
 
 export class AudioRecorderService {
   private process: ChildProcess | null = null;
   private tempFile: string | null = null;
   private isRecording = false;
   private startTime = 0;
-
-  private static checkExecutable(execPath: string): boolean {
-    try {
-      fs.accessSync(execPath, fs.constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  static detectAvailableTools(): RecordingToolInfo[] {
-    const tools: RecordingToolInfo[] = [];
-    const platform = process.platform;
-
-    // Check for arecord (Linux ALSA)
-    if (platform === 'linux') {
-      try {
-        execSync('which arecord', { stdio: 'ignore' });
-        tools.push({ tool: 'arecord', command: 'arecord', available: true });
-      } catch {
-        tools.push({ tool: 'arecord', command: 'arecord', available: false });
-      }
-    }
-
-    // Check for sox/rec
-    let soxFound = false;
-
-    // On macOS, check Homebrew paths directly (VS Code doesn't inherit shell PATH)
-    if (platform === 'darwin') {
-      const homebrewPaths = [
-        '/opt/homebrew/bin',  // Apple Silicon
-        '/usr/local/bin'      // Intel Mac
-      ];
-
-      for (const brewPath of homebrewPaths) {
-        const recPath = path.join(brewPath, 'rec');
-        const soxPath = path.join(brewPath, 'sox');
-
-        if (this.checkExecutable(recPath)) {
-          tools.push({ tool: 'sox', command: recPath, available: true });
-          soxFound = true;
-          break;
-        }
-        if (this.checkExecutable(soxPath)) {
-          tools.push({ tool: 'sox', command: soxPath, available: true });
-          soxFound = true;
-          break;
-        }
-      }
-    }
-
-    // Fallback: use which/where command
-    if (!soxFound) {
-      const soxCommand = platform === 'win32' ? 'sox' : 'rec';
-      const whichCommand = platform === 'win32' ? 'where' : 'which';
-
-      try {
-        execSync(`${whichCommand} ${soxCommand}`, { stdio: 'ignore' });
-        tools.push({ tool: 'sox', command: soxCommand, available: true });
-      } catch {
-        try {
-          execSync(`${whichCommand} sox`, { stdio: 'ignore' });
-          tools.push({ tool: 'sox', command: 'sox', available: true });
-        } catch {
-          tools.push({ tool: 'sox', command: soxCommand, available: false });
-        }
-      }
-    }
-
-    return tools;
-  }
+  private stderrTail = '';
 
   /**
-   * Get the best available recording tool
-   */
-  static getBestTool(): RecordingToolInfo | null {
-    const tools = AudioRecorderService.detectAvailableTools();
-
-    // Prefer arecord on Linux (no additional install needed)
-    const arecord = tools.find(t => t.tool === 'arecord' && t.available);
-    if (arecord) return arecord;
-
-    // Fall back to sox
-    const sox = tools.find(t => t.tool === 'sox' && t.available);
-    if (sox) return sox;
-
-    return null;
-  }
-
-  /**
-   * Check if any recording tool is available
+   * Check if ffmpeg is available for recording
    */
   static isAvailable(): boolean {
-    return AudioRecorderService.getBestTool() !== null;
+    return isFfmpegAvailable();
   }
 
   /**
-   * Get platform-specific installation instructions
+   * Get platform-specific installation instructions for ffmpeg
    */
   static getInstallInstructions(): string {
+    return getFfmpegInstallInstructions();
+  }
+
+  private buildRecordArgs(tempFile: string): string[] {
     const platform = process.platform;
+    const commonOutput = [
+      '-ar', '16000',            // 16kHz sample rate
+      '-ac', '1',                // mono
+      '-acodec', 'pcm_s16le',    // 16-bit PCM
+      '-f', 'wav',               // WAV container
+      '-y',                      // overwrite output
+      tempFile,
+    ];
 
     if (platform === 'darwin') {
-      return 'brew install sox';
-    } else if (platform === 'win32') {
-      return 'choco install sox.portable\nor download from https://sourceforge.net/projects/sox/';
-    } else {
-      return 'sudo apt install sox libsox-fmt-all\nor: sudo apt install alsa-utils';
+      return [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-f', 'avfoundation',
+        '-i', ':0',              // no video, first audio device (default input)
+        ...commonOutput,
+      ];
     }
+
+    if (platform === 'win32') {
+      const device = detectWindowsAudioDevice() || 'Microphone';
+      return [
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-f', 'dshow',
+        '-i', `audio=${device}`,
+        ...commonOutput,
+      ];
+    }
+
+    // Linux
+    const backend = detectLinuxAudioBackend();
+    return [
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-f', backend,
+      '-i', 'default',
+      ...commonOutput,
+    ];
   }
 
   /**
@@ -135,73 +82,89 @@ export class AudioRecorderService {
       throw new Error('Already recording');
     }
 
-    const toolInfo = AudioRecorderService.getBestTool();
-    if (!toolInfo) {
+    const ffmpegPath = getFfmpegPath();
+    if (!ffmpegPath) {
       throw new Error('NO_RECORDING_TOOL');
     }
 
-    // Create temp file
     this.tempFile = path.join(os.tmpdir(), `voice-transcriber-${Date.now()}.wav`);
-
-    // Build command arguments based on tool
-    let args: string[];
-
-    if (toolInfo.tool === 'arecord') {
-      // arecord: ALSA recorder (Linux)
-      args = [
-        '-f', 'S16_LE',      // 16-bit signed little-endian
-        '-r', '16000',       // 16kHz sample rate
-        '-c', '1',           // mono
-        '-t', 'wav',         // WAV format
-        this.tempFile
-      ];
-    } else {
-      // sox/rec
-      if (toolInfo.command.endsWith('rec')) {
-        // rec command (sox wrapper)
-        args = [
-          '-r', '16000',     // 16kHz sample rate
-          '-c', '1',         // mono
-          '-b', '16',        // 16-bit
-          this.tempFile
-        ];
-      } else {
-        // sox with default input
-        args = [
-          '-d',              // default input device
-          '-r', '16000',     // 16kHz sample rate
-          '-c', '1',         // mono
-          '-b', '16',        // 16-bit
-          this.tempFile
-        ];
-      }
-    }
+    this.stderrTail = '';
+    const args = this.buildRecordArgs(this.tempFile);
 
     return new Promise((resolve, reject) => {
       try {
-        this.process = spawn(toolInfo.command, args, {
-          stdio: ['ignore', 'ignore', 'ignore']
+        this.process = spawn(ffmpegPath, args, {
+          stdio: ['pipe', 'ignore', 'pipe'],
         });
 
-        this.process.on('error', (err) => {
+        const proc = this.process;
+
+        if (proc.stderr) {
+          proc.stderr.on('data', (chunk: Buffer) => {
+            this.stderrTail += chunk.toString('utf8');
+            // Keep last 4KB to avoid unbounded memory
+            if (this.stderrTail.length > 4096) {
+              this.stderrTail = this.stderrTail.slice(this.stderrTail.length - 4096);
+            }
+          });
+        }
+
+        let settled = false;
+
+        const onEarlyExit = (code: number | null) => {
+          if (settled) return;
+          settled = true;
+          const stderr = this.stderrTail.trim();
+          this.cleanup();
+          // Classify: device/permission issue vs other
+          if (this.looksLikeMicError(stderr)) {
+            reject(new Error('NO_MIC_DEVICE'));
+          } else {
+            reject(new Error(`Failed to start recording (exit ${code}): ${stderr || 'unknown error'}`));
+          }
+        };
+
+        proc.on('error', (err) => {
+          if (settled) return;
+          settled = true;
           this.cleanup();
           reject(new Error(`Failed to start recording: ${err.message}`));
         });
 
-        // Give it a moment to start
-        setTimeout(() => {
-          if (this.process && !this.process.killed) {
-            this.isRecording = true;
-            this.startTime = Date.now();
-            resolve();
-          }
-        }, 100);
+        proc.on('exit', onEarlyExit);
 
+        // Give ffmpeg time to initialize the audio device (slower than sox)
+        setTimeout(() => {
+          if (settled) return;
+          if (proc.exitCode !== null) {
+            // Process already exited during grace period — onEarlyExit will handle it
+            return;
+          }
+          settled = true;
+          // Remove the early-exit listener — from now on, exit is normal stop flow
+          proc.removeListener('exit', onEarlyExit);
+          this.isRecording = true;
+          this.startTime = Date.now();
+          resolve();
+        }, 500);
       } catch (err) {
         this.cleanup();
         reject(err);
       }
     });
+  }
+
+  private looksLikeMicError(stderr: string): boolean {
+    const s = stderr.toLowerCase();
+    return (
+      s.includes('permission denied') ||
+      s.includes('input/output error') ||
+      s.includes('no such device') ||
+      s.includes('could not open') ||
+      s.includes('unknown input format') ||
+      s.includes('cannot open') ||
+      s.includes('device or resource busy')
+    );
   }
 
   async stop(): Promise<{ buffer: Buffer; mimeType: string }> {
@@ -245,12 +208,12 @@ export class AudioRecorderService {
         reject(err);
       });
 
-      // Send SIGINT (Ctrl+C) — sox/rec handles this as the standard stop signal,
+      // Send SIGINT (Ctrl+C) — ffmpeg handles this as the standard stop signal,
       // properly flushing all internal audio buffers and updating the WAV header.
-      // SIGTERM may cause sox to skip buffer flush, losing the last seconds of audio.
+      // On Windows, Node translates SIGINT to a terminate; the last ~0.5s may be lost.
       proc.kill('SIGINT');
 
-      // If SIGTERM doesn't work within 5 seconds, use SIGKILL
+      // If SIGINT doesn't work within 5 seconds, escalate to SIGKILL
       killTimeout = setTimeout(() => {
         if (!resolved) {
           try { proc.kill('SIGKILL'); } catch {}
@@ -269,7 +232,7 @@ export class AudioRecorderService {
    */
   cancel(): void {
     if (this.process) {
-      this.process.kill('SIGKILL');
+      try { this.process.kill('SIGKILL'); } catch {}
     }
 
     if (this.tempFile && fs.existsSync(this.tempFile)) {
@@ -303,5 +266,6 @@ export class AudioRecorderService {
     this.tempFile = null;
     this.isRecording = false;
     this.startTime = 0;
+    this.stderrTail = '';
   }
 }
