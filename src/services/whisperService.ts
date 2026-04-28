@@ -6,12 +6,13 @@ import { TranscriberSettings } from '../types';
 import { isFfmpegAvailable, runFfmpeg } from './ffmpeg';
 
 const MAX_FILE_SIZE = 24 * 1024 * 1024; // 24MB (leaving margin for 25MB limit)
+const FAST_PATH_THRESHOLD = 5 * 1024 * 1024; // ≤5MB → single API call (fast path, no ffmpeg needed)
 const CHUNK_SECONDS = 600; // 10 minutes per chunk
 const CHUNK_BITRATE = '128k';
-const MAX_PARALLEL_CHUNKS = 20;
+const MAX_PARALLEL_CHUNKS = 5; // Higher values trigger OpenAI rate limits (429), wasting time on retries
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 60_000; // 1 min — fail fast on stuck connections, retry will handle legit slowness
+const REQUEST_TIMEOUT_MS = 60_000; // 1 min per request — fine for ≤10min chunks; large files always go through chunking
 
 export class WhisperService {
   constructor(private readonly storage: StorageService) {}
@@ -28,18 +29,18 @@ export class WhisperService {
       throw new Error('Please enter your OpenAI API key in Settings.');
     }
 
-    // Fast path: small file in a format Whisper already supports
-    if (audioBuffer.length <= MAX_FILE_SIZE && isWhisperCompatible(mimeType)) {
-      return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey);
+    // Fast path: tiny file in a format Whisper accepts directly. Larger files always go
+    // through ffmpeg so they get chunked + transcribed in parallel with progress feedback.
+    if (audioBuffer.length <= FAST_PATH_THRESHOLD && isWhisperCompatible(mimeType)) {
+      return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey, 'single');
     }
 
-    // Either too big, a video, or a format we can't send directly — route through ffmpeg
     if (!isFfmpegAvailable()) {
       if (audioBuffer.length > MAX_FILE_SIZE) {
         throw new Error('Files over 24 MB require ffmpeg for chunking. Install ffmpeg to process this file.');
       }
-      // Small but weird format — try sending as-is (Whisper will reject if truly unsupported)
-      return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey);
+      // Mid-sized file but no ffmpeg — try sending as-is, Whisper will reject if format unsupported
+      return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey, 'single');
     }
 
     return this.transcribeViaFfmpeg(audioBuffer, mimeType, settings, apiKey, onProgress);
@@ -164,16 +165,9 @@ export class WhisperService {
         { captureStderr: true }
       );
 
-      const transcodedSize = fs.statSync(transcodedPath).size;
-      const transcodedBuffer = fs.readFileSync(transcodedPath);
-
-      // Single-chunk fast path: whole transcoded file fits in one request
-      if (transcodedSize <= MAX_FILE_SIZE) {
-        if (onProgress) onProgress('Transcribing audio...');
-        return this.transcribeSingle(transcodedBuffer, 'audio/mpeg', settings, apiKey, 'single');
-      }
-
-      // Stage 2: split into time-based chunks
+      // Stage 2: always split into time-based chunks. Even if the whole transcoded file
+      // would fit in one request, chunking gives parallelism + progress feedback + safe
+      // per-request timeouts (each chunk is ≤10min audio, comfortably handled in 60s).
       if (onProgress) onProgress('Splitting audio into chunks...', 0);
       const chunkPattern = path.join(workDir, 'chunk-%03d.mp3');
       await runFfmpeg(

@@ -2,6 +2,12 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.0.1] - 2026-04-28
+
+### Fixed
+- Long files (50+ min) no longer hang on "Transcribing audio..." — all medium/large files now route through chunking instead of trying a single big API call that times out
+- Lowered parallel chunk limit from 20 to 5 to stay under OpenAI rate limits and avoid wasteful 429 retries
+
 ## [1.0.0] - 2026-04-24
 
 ### Breaking
