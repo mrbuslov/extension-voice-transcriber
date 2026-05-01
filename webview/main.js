@@ -249,6 +249,7 @@
     if (elements.downloadAudioBtn) {
       elements.downloadAudioBtn.style.display = 'none';
     }
+    document.getElementById('recording-section').classList.remove('is-recording');
   }
 
   function showProgress(message, progress) {
@@ -527,6 +528,7 @@
         if (elements.downloadAudioBtn) {
           elements.downloadAudioBtn.style.display = 'none';
         }
+        document.getElementById('recording-section').classList.add('is-recording');
         hidePermissionError();
         break;
 

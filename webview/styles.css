@@ -244,6 +244,7 @@ button:disabled {
 #recording-section {
   padding: 24px;
   text-align: center;
+  overflow: visible;
 }
 
 #recording-header {
@@ -269,22 +270,46 @@ button:disabled {
   font-size: 18px;
   font-weight: 500;
   color: var(--vscode-foreground);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 #recording-status.recording {
   color: var(--vscode-charts-red);
 }
 
+#recording-status.recording::before {
+  content: '';
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background-color: var(--vscode-charts-red);
+  animation: rec-dot-pulse 1.2s ease-in-out infinite;
+}
+
 #recording-status.paused {
   color: var(--vscode-charts-yellow);
 }
 
+@keyframes rec-dot-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.35; transform: scale(0.7); }
+}
+
 #timer {
-  font-size: 32px;
-  font-family: 'Courier New', monospace;
-  font-weight: bold;
+  font-size: 36px;
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
   margin-bottom: 20px;
   color: var(--vscode-foreground);
+}
+
+#recording-section.is-recording #timer {
+  color: var(--vscode-charts-red);
 }
 
 #recording-controls {
@@ -317,6 +342,10 @@ button:disabled {
   transform: scale(1.05);
 }
 
+.record-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
 .record-btn.primary {
   width: 64px;
   height: 64px;
@@ -328,15 +357,54 @@ button:disabled {
 
 .record-btn.primary:hover:not(:disabled) {
   background-color: var(--vscode-button-hoverBackground);
+  transform: scale(1.08);
+}
+
+.record-btn.primary:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .record-btn.danger {
   background-color: var(--vscode-inputValidation-errorBackground);
   color: var(--vscode-errorForeground);
+  position: relative;
+  isolation: isolate;
 }
 
 .record-btn.danger:hover:not(:disabled) {
   opacity: 0.9;
+}
+
+#recording-section.is-recording #stop-btn::before,
+#recording-section.is-recording #stop-btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 2px solid var(--vscode-charts-red);
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0;
+  animation: stop-btn-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+#recording-section.is-recording #stop-btn::after {
+  animation-delay: 0.9s;
+}
+
+@keyframes stop-btn-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2.1);
+    opacity: 0;
+  }
 }
 
 .record-btn svg {
@@ -530,12 +598,15 @@ button:disabled {
   padding: 12px;
   background-color: var(--vscode-input-background);
   border-radius: 4px;
+  border-left: 2px solid transparent;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.2s ease, transform 0.15s ease, border-left-color 0.2s ease;
 }
 
 .history-item:hover {
   background-color: var(--vscode-list-hoverBackground);
+  border-left-color: var(--vscode-textLink-foreground);
+  transform: translateY(-1px);
 }
 
 .history-item-content {
@@ -638,22 +709,30 @@ button:disabled {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 24px;
+  gap: 10px;
+  padding: 28px 24px;
   border: 2px dashed var(--vscode-panel-border);
   border-radius: 8px;
   cursor: pointer;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease, color 0.2s ease;
   color: var(--vscode-descriptionForeground);
 }
 
 .upload-label:hover {
   border-color: var(--vscode-focusBorder);
   background-color: var(--vscode-list-hoverBackground);
+  color: var(--vscode-foreground);
+  transform: translateY(-1px);
 }
 
 .upload-label svg {
   color: var(--vscode-descriptionForeground);
+  transition: color 0.2s ease, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.upload-label:hover svg {
+  color: var(--vscode-focusBorder);
+  transform: translateY(-3px);
 }
 
 .upload-formats {

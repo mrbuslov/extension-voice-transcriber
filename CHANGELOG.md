@@ -2,6 +2,16 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.0.2] - 2026-05-01
+
+### Changed
+- UI polish during recording — pulsing red dot before "Recording..." status and animated rings expanding from the stop button make it obvious the mic is live
+- Timer redesigned — switched from `Courier New` to system monospace with `tabular-nums`, so digits no longer jitter as time ticks; turns red while recording
+- Drag-and-drop upload area now lifts subtly on hover with a bouncy icon, instead of a static dashed box
+- History items lift on hover and show an accent line on the left
+- Record buttons gained press-down feedback (scale on `:active`) for a more tactile feel
+- All changes use VS Code theme variables — works correctly across dark, light, and high-contrast themes
+
 ## [1.0.1] - 2026-04-28
 
 ### Fixed
