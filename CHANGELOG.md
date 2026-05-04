@@ -2,6 +2,11 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.0.3] - 2026-05-01
+
+### Added
+- Drag-and-drop audio/video files onto the upload area to transcribe — no need to click and navigate the file picker. Drop zone visually highlights while dragging.
+
 ## [1.0.2] - 2026-05-01
 
 ### Changed

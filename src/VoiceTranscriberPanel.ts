@@ -601,7 +601,7 @@ export class VoiceTranscriberPanel {
             <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
               <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
             </svg>
-            <span>Click to upload audio file</span>
+            <span>Click or drop audio file here</span>
             <span class="upload-formats">Audio: MP3, WAV, M4A, WebM, OGG, FLAC &nbsp;&middot;&nbsp; Video: MP4, MKV, MOV, AVI</span>
           </label>
         </div>

@@ -79,6 +79,7 @@
     if (elements.audioFileInput) {
       elements.audioFileInput.addEventListener('change', handleAudioUpload);
     }
+    setupDragAndDrop();
 
     elements.editToggleBtn.addEventListener('click', toggleEditMode);
     elements.insertBtn.addEventListener('click', insertToEditor);
@@ -215,7 +216,35 @@
 
   function handleAudioUpload(event) {
     const file = event.target.files[0];
-    if (!file) return;
+    if (file) {
+      processAudioFile(file);
+    }
+    // Reset input so same file can be selected again
+    event.target.value = '';
+  }
+
+  const ACCEPTED_EXTENSIONS = ['mp3', 'wav', 'm4a', 'mp4', 'webm', 'ogg', 'oga', 'flac', 'mkv', 'mov', 'avi'];
+
+  function isAcceptedFile(file) {
+    const type = (file.type || '').toLowerCase();
+    if (type.startsWith('audio/') || type.startsWith('video/')) {
+      return true;
+    }
+    const name = file.name.toLowerCase();
+    const dotIdx = name.lastIndexOf('.');
+    if (dotIdx === -1) return false;
+    const ext = name.slice(dotIdx + 1);
+    return ACCEPTED_EXTENSIONS.includes(ext);
+  }
+
+  function processAudioFile(file) {
+    if (!isAcceptedFile(file)) {
+      vscode.postMessage({
+        type: 'showError',
+        message: `Unsupported file: ${file.name}. Use audio (MP3, WAV, M4A, WebM, OGG, FLAC) or video (MP4, MKV, MOV, AVI).`,
+      });
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = function (e) {
@@ -229,9 +258,48 @@
       showProgress(`Transcribing ${file.name}...`);
     };
     reader.readAsDataURL(file);
+  }
 
-    // Reset input so same file can be selected again
-    event.target.value = '';
+  function setupDragAndDrop() {
+    const dropZone = document.querySelector('#upload-area .upload-label');
+    if (!dropZone) return;
+
+    let dragDepth = 0;
+
+    dropZone.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragDepth++;
+      dropZone.classList.add('is-dragover');
+    });
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    });
+
+    dropZone.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) {
+        dropZone.classList.remove('is-dragover');
+      }
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dragDepth = 0;
+      dropZone.classList.remove('is-dragover');
+
+      const files = e.dataTransfer ? e.dataTransfer.files : null;
+      if (!files || files.length === 0) return;
+      processAudioFile(files[0]);
+    });
+
+    // Prevent the browser from opening the file if user misses the drop zone
+    window.addEventListener('dragover', (e) => e.preventDefault());
+    window.addEventListener('drop', (e) => e.preventDefault());
   }
 
   function resetRecordingUI() {
