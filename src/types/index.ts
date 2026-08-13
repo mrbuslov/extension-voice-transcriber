@@ -17,6 +17,8 @@ export interface ProviderConfig {
   extraHeaders: Record<string, string>;
   /** Audio seconds per chunk when a file has to be split — bounded by the provider's request timeout */
   chunkSeconds: number;
+  /** Per-request abort deadline. Must clear the provider's worst-case latency for one chunk. */
+  requestTimeoutMs: number;
   transcriptionModels: ModelOption[];
   cleanupModels: ModelOption[];
 }
@@ -36,6 +38,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     chatUrl: 'https://api.openai.com/v1/chat/completions',
     extraHeaders: {},
     chunkSeconds: 600,
+    requestTimeoutMs: 60_000,
     transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1' }],
     cleanupModels: [
       { id: 'gpt-4.1-nano', label: 'gpt-4.1-nano (default)' },
@@ -51,8 +54,10 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     transcriptionUrl: 'https://openrouter.ai/api/v1/audio/transcriptions',
     chatUrl: 'https://openrouter.ai/api/v1/chat/completions',
     extraHeaders: OPENROUTER_ATTRIBUTION_HEADERS,
-    // OpenRouter aborts upstream calls at 60s, so keep chunks well under what Whisper needs for 10 min
     chunkSeconds: 300,
+    // Routing + queueing on top of Whisper puts a 5-min chunk in the 25-60s range, and
+    // measured runs exceed 60s under load — a tight deadline just burns retries
+    requestTimeoutMs: 240_000,
     transcriptionModels: [
       { id: 'openai/whisper-1', label: 'Whisper 1 (default)' },
       { id: 'openai/whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo' },
@@ -78,6 +83,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     chatUrl: null,
     extraHeaders: {},
     chunkSeconds: 600,
+    requestTimeoutMs: 60_000,
     transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1' }],
     cleanupModels: [],
   },

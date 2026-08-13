@@ -97,7 +97,7 @@ Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → "Developer: Open Webview De
 
 ### Large files and video uploads
 
-Recordings over 24 MB are transcoded to 128 kbps MP3 and split into chunks (10 minutes for OpenAI and local, 5 minutes for OpenRouter, which cuts off upstream requests at 60 seconds), each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
+Recordings over 24 MB are transcoded to 128 kbps MP3 and split into chunks (10 minutes for OpenAI and local, 5 minutes for OpenRouter, whose routing overhead makes long chunks much slower), each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
 
 ## Privacy
 

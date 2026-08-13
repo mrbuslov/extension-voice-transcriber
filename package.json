@@ -2,7 +2,7 @@
   "name": "voice-transcriber",
   "displayName": "Voice Transcriber",
   "description": "Record voice and transcribe using OpenAI Whisper, OpenRouter, or a local model. Speech-to-text for developers.",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "publisher": "mrbuslov",
   "engines": {
     "vscode": "^1.85.0"

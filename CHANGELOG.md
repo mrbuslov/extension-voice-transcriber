@@ -2,6 +2,11 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.1.1] - 2026-08-13
+
+### Fixed
+- Long files on OpenRouter no longer crawl. Measured against an 11-minute recording, transcription went from 389s to 81s — the 60s per-request deadline inherited from OpenAI was aborting OpenRouter chunks that legitimately take 50-80s, so every chunk burned four or five 60-second timeouts before landing. The deadline is now per provider (240s for OpenRouter), and aborted attempts no longer waste upstream compute
+
 ## [1.1.0] - 2026-08-13
 
 ### Added
@@ -12,7 +17,7 @@ All notable changes to the Voice Transcriber extension will be documented in thi
 
 ### Changed
 - Providers, models, endpoints and languages now come from one registry in `src/types/index.ts` instead of being duplicated across the webview HTML and the services
-- Long files split into 5-minute chunks on OpenRouter (down from 10) — OpenRouter cuts off upstream requests at 60 seconds
+- Long files split into 5-minute chunks on OpenRouter (down from 10) to keep each request within a sane latency window
 - Cleanup failures now say why in the warning instead of just "cleanup failed"
 
 ## [1.0.3] - 2026-05-01

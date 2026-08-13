@@ -11,7 +11,6 @@ const CHUNK_BITRATE = '128k';
 const MAX_PARALLEL_CHUNKS = 5; // Higher values trigger OpenAI rate limits (429), wasting time on retries
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 60_000; // 1 min per request; large files always go through chunking
 
 export class WhisperService {
   constructor(private readonly storage: StorageService) {}
@@ -62,6 +61,7 @@ export class WhisperService {
     const extension = getExtension(mimeType);
     const config = PROVIDERS[settings.provider];
     const url = resolveTranscriptionUrl(settings);
+    const requestTimeoutMs = config.requestTimeoutMs;
 
     const headers: Record<string, string> = { ...config.extraHeaders };
     if (apiKey) {
@@ -81,7 +81,7 @@ export class WhisperService {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
       const startedAt = Date.now();
 
       let response: Response;
@@ -96,14 +96,14 @@ export class WhisperService {
         clearTimeout(timeoutId);
         const err = fetchError as Error;
         const elapsed = Date.now() - startedAt;
-        const isTimeout = err.name === 'AbortError' || elapsed >= REQUEST_TIMEOUT_MS - 100;
+        const isTimeout = err.name === 'AbortError' || elapsed >= requestTimeoutMs - 100;
         const reason = isTimeout ? `timeout after ${elapsed}ms` : err.message;
         console.error(`[WhisperService:${label}] Fetch error (attempt ${attempt + 1}): ${reason}`);
         if (attempt < MAX_RETRIES) {
           await sleep(backoffDelay(attempt));
           continue;
         }
-        throw new Error(isTimeout ? `Request timed out after ${REQUEST_TIMEOUT_MS}ms` : `Network error: ${err.message}`);
+        throw new Error(isTimeout ? `Request timed out after ${requestTimeoutMs}ms` : `Network error: ${err.message}`);
       }
       clearTimeout(timeoutId);
 
