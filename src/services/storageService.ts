@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import {
+  Provider,
   TranscriberSettings,
   defaultSettings,
   HistoryEntry,
@@ -10,21 +11,56 @@ export class StorageService {
   private static readonly SETTINGS_KEY = 'voiceTranscriber.settings';
   private static readonly HISTORY_KEY = 'voiceTranscriber.history';
   private static readonly SESSION_KEY = 'voiceTranscriber.session';
-  private static readonly API_KEY_KEY = 'voiceTranscriber.apiKey';
   private static readonly UI_STATE_KEY = 'voiceTranscriber.uiState';
+  private static readonly LEGACY_API_KEY_KEY = 'voiceTranscriber.apiKey';
+
+  private migration: Promise<void> | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
-  async getApiKey(): Promise<string | undefined> {
-    return this.context.secrets.get(StorageService.API_KEY_KEY);
+  private static apiKeySecret(provider: Provider): string {
+    return `voiceTranscriber.apiKey.${provider}`;
   }
 
-  async setApiKey(key: string): Promise<void> {
-    await this.context.secrets.store(StorageService.API_KEY_KEY, key);
+  /**
+   * Runs lazily on first key access rather than at activation — a stalled system keychain
+   * would otherwise stall the whole extension.
+   */
+  private ensureMigrated(): Promise<void> {
+    if (!this.migration) {
+      this.migration = this.migrateLegacyApiKey().catch((error) => {
+        this.migration = undefined;
+        throw error;
+      });
+    }
+    return this.migration;
   }
 
-  async deleteApiKey(): Promise<void> {
-    await this.context.secrets.delete(StorageService.API_KEY_KEY);
+  /** Keys used to live under a single provider-less secret; move them to the OpenAI slot. */
+  private async migrateLegacyApiKey(): Promise<void> {
+    const legacy = await this.context.secrets.get(StorageService.LEGACY_API_KEY_KEY);
+    if (!legacy) {
+      return;
+    }
+    const existing = await this.context.secrets.get(StorageService.apiKeySecret('openai'));
+    if (!existing) {
+      await this.context.secrets.store(StorageService.apiKeySecret('openai'), legacy);
+    }
+    await this.context.secrets.delete(StorageService.LEGACY_API_KEY_KEY);
+  }
+
+  async getApiKey(provider: Provider): Promise<string | undefined> {
+    await this.ensureMigrated();
+    return this.context.secrets.get(StorageService.apiKeySecret(provider));
+  }
+
+  async setApiKey(provider: Provider, key: string): Promise<void> {
+    await this.ensureMigrated();
+    await this.context.secrets.store(StorageService.apiKeySecret(provider), key);
+  }
+
+  async deleteApiKey(provider: Provider): Promise<void> {
+    await this.context.secrets.delete(StorageService.apiKeySecret(provider));
   }
 
   getSettings(): TranscriberSettings {

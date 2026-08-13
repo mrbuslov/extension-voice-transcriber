@@ -166,6 +166,16 @@ select {
   color: var(--vscode-errorForeground);
 }
 
+.hint-link {
+  color: var(--vscode-textLink-foreground);
+  text-decoration: none;
+}
+
+.hint-link:hover {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
 /* Buttons */
 button {
   padding: 8px 16px;

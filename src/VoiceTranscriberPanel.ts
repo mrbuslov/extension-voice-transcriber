@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { StorageService } from './services/storageService';
 import { WhisperService } from './services/whisperService';
-import { OpenAIService } from './services/openaiService';
+import { CleanupService } from './services/cleanupService';
 import { AudioRecorderService } from './services/audioRecorderService';
 import { BrowserRecorderService } from './services/browserRecorderService';
 import {
@@ -9,6 +9,8 @@ import {
   MessageToWebview,
   HistoryEntry,
   RecordingCapabilities,
+  LANGUAGES,
+  PROVIDERS,
 } from './types';
 
 export class VoiceTranscriberPanel {
@@ -19,7 +21,7 @@ export class VoiceTranscriberPanel {
   private readonly _extensionUri: vscode.Uri;
   private readonly _storage: StorageService;
   private readonly _whisper: WhisperService;
-  private readonly _openai: OpenAIService;
+  private readonly _cleanup: CleanupService;
   private readonly _audioRecorder: AudioRecorderService;
   private readonly _browserRecorder: BrowserRecorderService;
   private _recordingTimer: NodeJS.Timeout | null = null;
@@ -65,7 +67,7 @@ export class VoiceTranscriberPanel {
     this._panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     this._storage = new StorageService(context);
     this._whisper = new WhisperService(this._storage);
-    this._openai = new OpenAIService(this._storage);
+    this._cleanup = new CleanupService(this._storage);
     this._audioRecorder = new AudioRecorderService();
     this._browserRecorder = new BrowserRecorderService(context.extensionUri);
 
@@ -91,13 +93,20 @@ export class VoiceTranscriberPanel {
         break;
 
       case 'saveApiKey':
-        await this._storage.setApiKey(message.key);
+        await this._storage.setApiKey(message.provider, message.key);
+        this._postMessage({ type: 'apiKeyLoaded', provider: message.provider, hasKey: true });
         break;
 
-      case 'getApiKey':
-        const hasKey = !!(await this._storage.getApiKey());
-        this._postMessage({ type: 'apiKeyLoaded', hasKey });
+      case 'deleteApiKey':
+        await this._storage.deleteApiKey(message.provider);
+        this._postMessage({ type: 'apiKeyLoaded', provider: message.provider, hasKey: false });
         break;
+
+      case 'getApiKey': {
+        const hasKey = !!(await this._storage.getApiKey(message.provider));
+        this._postMessage({ type: 'apiKeyLoaded', provider: message.provider, hasKey });
+        break;
+      }
 
       case 'transcribe':
         await this._handleTranscription(message.audioData, message.mimeType);
@@ -211,6 +220,8 @@ export class VoiceTranscriberPanel {
       this._postMessage({ type: 'sessionRecovery', session });
     }
 
+    // Key status is requested by the webview per provider once settings are applied.
+
     // Restore recording state if recording is in progress
     if (this._audioRecorder.getIsRecording()) {
       this._postMessage({ type: 'recordingStarted' });
@@ -221,21 +232,6 @@ export class VoiceTranscriberPanel {
           this._postMessage({ type: 'recordingTime', elapsed });
         }, 100);
       }
-    }
-
-    // Load API key status async (don't block UI)
-    this._loadApiKeyStatus();
-  }
-
-  private async _loadApiKeyStatus() {
-    try {
-      const hasKey = !!(await Promise.race([
-        this._storage.getApiKey(),
-        new Promise<null>(resolve => setTimeout(() => resolve(null), 3000))
-      ]));
-      this._postMessage({ type: 'apiKeyLoaded', hasKey });
-    } catch {
-      this._postMessage({ type: 'apiKeyLoaded', hasKey: false });
     }
   }
 
@@ -355,12 +351,15 @@ export class VoiceTranscriberPanel {
 
       let cleanedText: string | undefined;
 
-      if (settings.enableCleanup && settings.provider === 'openai') {
+      if (settings.enableCleanup && PROVIDERS[settings.provider].chatUrl) {
         this._postMessage({ type: 'transcriptionProgress', message: 'Cleaning up text...' });
         try {
-          cleanedText = await this._openai.cleanupText(rawText, settings.cleanupModel);
-        } catch {
-          vscode.window.showWarningMessage('Text cleanup failed. Showing original transcription.');
+          cleanedText = await this._cleanup.cleanupText(rawText, settings);
+        } catch (cleanupError) {
+          const reason = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+          vscode.window.showWarningMessage(
+            `Text cleanup failed (${reason}). Showing original transcription.`
+          );
         }
       }
 
@@ -425,6 +424,15 @@ export class VoiceTranscriberPanel {
 
     const nonce = getNonce();
 
+    const providerOptions = Object.entries(PROVIDERS)
+      .map(([id, config]) => `<option value="${id}">${config.label}</option>`)
+      .join('\n            ');
+    const languageOptions = LANGUAGES.map(
+      (lang) => `<option value="${lang.code}">${lang.label}</option>`
+    ).join('\n              ');
+    // Model lists are rebuilt client-side whenever the provider changes
+    const providersJson = JSON.stringify(PROVIDERS).replace(/</g, '\\u003c');
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -447,19 +455,20 @@ export class VoiceTranscriberPanel {
         <div class="form-group">
           <label for="provider">Provider</label>
           <select id="provider">
-            <option value="openai">OpenAI</option>
-            <option value="local">Local/Custom</option>
+            ${providerOptions}
           </select>
         </div>
 
         <div class="form-group" id="api-key-group">
-          <label for="api-key">API Key</label>
+          <label for="api-key"><span id="api-key-label">API Key</span></label>
           <div class="api-key-row">
-            <input type="password" id="api-key" placeholder="Enter your OpenAI API key">
+            <input type="password" id="api-key" placeholder="Enter your API key">
             <button id="toggle-api-key" class="icon-button" title="Show/Hide">&#128065;</button>
             <button id="save-api-key" class="icon-button" title="Save">&#128190;</button>
+            <button id="clear-api-key" class="icon-button" title="Remove saved key">&#128465;</button>
           </div>
           <span id="api-key-status" class="status-text"></span>
+          <a id="api-key-link" class="hint hint-link" href="#" target="_blank" rel="noreferrer">Get an API key &#8599;</a>
         </div>
 
         <div class="form-group" id="local-url-group" style="display: none;">
@@ -477,30 +486,18 @@ export class VoiceTranscriberPanel {
 
         <details class="advanced-settings">
           <summary>Advanced Settings</summary>
+          <div class="form-group" id="transcription-model-group">
+            <label for="transcription-model">Transcription Model</label>
+            <select id="transcription-model"></select>
+          </div>
           <div class="form-group" id="cleanup-model-group">
             <label for="cleanup-model">LLM Model</label>
-            <select id="cleanup-model">
-              <option value="gpt-4.1-nano">gpt-4.1-nano (default)</option>
-              <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-              <option value="gpt-4.1">gpt-4.1</option>
-            </select>
+            <select id="cleanup-model"></select>
           </div>
           <div class="form-group">
             <label for="language">Language</label>
             <select id="language">
-              <option value="">Auto-detect</option>
-              <option value="en">English</option>
-              <option value="ru">Russian</option>
-              <option value="uk">Ukrainian</option>
-              <option value="es">Spanish</option>
-              <option value="fr">French</option>
-              <option value="de">German</option>
-              <option value="it">Italian</option>
-              <option value="pt">Portuguese</option>
-              <option value="pl">Polish</option>
-              <option value="ja">Japanese</option>
-              <option value="ko">Korean</option>
-              <option value="zh">Chinese</option>
+              ${languageOptions}
             </select>
           </div>
         </details>
@@ -635,6 +632,7 @@ export class VoiceTranscriberPanel {
     </div>
   </div>
 
+  <script nonce="${nonce}">window.__PROVIDERS__ = ${providersJson};</script>
   <script nonce="${nonce}" src="${lamejsUri}"></script>
   <script nonce="${nonce}" src="${recorderUri}"></script>
   <script nonce="${nonce}" src="${scriptUri}"></script>

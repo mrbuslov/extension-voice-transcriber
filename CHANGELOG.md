@@ -2,6 +2,19 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.1.0] - 2026-08-13
+
+### Added
+- **OpenRouter provider** — pick "OpenRouter" in Settings and paste an `sk-or-v1-...` key to run both transcription and LLM cleanup through one key and one bill
+- **Transcription model picker** (Advanced Settings, OpenRouter only) — Whisper 1, Whisper Large v3 Turbo, GPT-4o Transcribe, GPT-4o Mini Transcribe, Deepgram Nova-3, Voxtral Mini Transcribe
+- Keys are now stored **per provider**, so switching between OpenAI and OpenRouter no longer overwrites the other key. An existing key is migrated to the OpenAI slot on first launch
+- "Get an API key" link and a delete button next to the key field; Enter in the key field saves it
+
+### Changed
+- Providers, models, endpoints and languages now come from one registry in `src/types/index.ts` instead of being duplicated across the webview HTML and the services
+- Long files split into 5-minute chunks on OpenRouter (down from 10) — OpenRouter cuts off upstream requests at 60 seconds
+- Cleanup failures now say why in the warning instead of just "cleanup failed"
+
 ## [1.0.3] - 2026-05-01
 
 ### Added

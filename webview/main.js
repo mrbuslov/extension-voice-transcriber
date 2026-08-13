@@ -1,5 +1,6 @@
 (function () {
   const vscode = acquireVsCodeApi();
+  const PROVIDERS = window.__PROVIDERS__;
 
   let currentMimeType = '';
   let lastAudioBlob = null;
@@ -13,14 +14,19 @@
     apiKey: document.getElementById('api-key'),
     toggleApiKey: document.getElementById('toggle-api-key'),
     saveApiKey: document.getElementById('save-api-key'),
+    clearApiKey: document.getElementById('clear-api-key'),
     apiKeyStatus: document.getElementById('api-key-status'),
     apiKeyGroup: document.getElementById('api-key-group'),
+    apiKeyLabel: document.getElementById('api-key-label'),
+    apiKeyLink: document.getElementById('api-key-link'),
     localUrlGroup: document.getElementById('local-url-group'),
     localUrl: document.getElementById('local-url'),
     enableCleanup: document.getElementById('enable-cleanup'),
     cleanupModel: document.getElementById('cleanup-model'),
     cleanupGroup: document.getElementById('cleanup-group'),
     cleanupModelGroup: document.getElementById('cleanup-model-group'),
+    transcriptionModel: document.getElementById('transcription-model'),
+    transcriptionModelGroup: document.getElementById('transcription-model-group'),
     language: document.getElementById('language'),
     recordingStatus: document.getElementById('recording-status'),
     timer: document.getElementById('timer'),
@@ -54,6 +60,12 @@
 
   
   function init() {
+    // Seed both selects so they are never empty before settings arrive — an empty
+    // select would make saveSettings() persist a blank model id
+    const seed = PROVIDERS[elements.provider.value];
+    populateModelSelect(elements.transcriptionModel, seed.transcriptionModels, '');
+    populateModelSelect(elements.cleanupModel, seed.cleanupModels, '');
+
     setupEventListeners();
     setupCollapsibles();
     vscode.postMessage({ type: 'ready' });
@@ -63,9 +75,14 @@
     elements.provider.addEventListener('change', handleProviderChange);
     elements.toggleApiKey.addEventListener('click', toggleApiKeyVisibility);
     elements.saveApiKey.addEventListener('click', saveApiKey);
+    elements.clearApiKey.addEventListener('click', clearApiKey);
+    elements.apiKey.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') saveApiKey();
+    });
     elements.localUrl.addEventListener('change', saveSettings);
     elements.enableCleanup.addEventListener('change', handleCleanupChange);
     elements.cleanupModel.addEventListener('change', saveSettings);
+    elements.transcriptionModel.addEventListener('change', saveSettings);
     elements.language.addEventListener('change', saveSettings);
 
     elements.startBtn.addEventListener('click', startRecording);
@@ -122,11 +139,65 @@
     });
   }
 
+  function populateModelSelect(select, models, savedValue) {
+    select.innerHTML = '';
+    models.forEach(model => {
+      const option = document.createElement('option');
+      option.value = model.id;
+      option.textContent = model.label;
+      select.appendChild(option);
+    });
+    const keepsSaved = models.some(model => model.id === savedValue);
+    select.value = keepsSaved ? savedValue : models[0].id;
+    return keepsSaved;
+  }
+
+  /** Rebuilds every provider-dependent control. Returns true if a stale model had to be reset. */
+  function applyProviderUI(savedModels) {
+    const provider = elements.provider.value;
+    const config = PROVIDERS[provider];
+
+    elements.apiKeyGroup.style.display = config.requiresApiKey ? 'block' : 'none';
+    elements.apiKeyLabel.textContent = `${config.label} API Key`;
+    elements.apiKey.placeholder = `Enter your ${config.label} API key`;
+    elements.apiKey.value = '';
+    elements.apiKeyLink.href = config.keysUrl;
+    elements.apiKeyLink.textContent = `Get a ${config.label} API key ↗`;
+    elements.localUrlGroup.style.display = config.transcriptionUrl ? 'none' : 'block';
+
+    const supportsCleanup = config.cleanupModels.length > 0;
+    elements.cleanupGroup.style.display = supportsCleanup ? 'block' : 'none';
+    elements.cleanupModelGroup.style.display = supportsCleanup ? 'block' : 'none';
+
+    let reset = !populateModelSelect(
+      elements.transcriptionModel,
+      config.transcriptionModels,
+      savedModels.transcriptionModel
+    );
+    elements.transcriptionModelGroup.style.display =
+      config.transcriptionModels.length > 1 ? 'block' : 'none';
+
+    if (supportsCleanup) {
+      reset =
+        !populateModelSelect(elements.cleanupModel, config.cleanupModels, savedModels.cleanupModel) ||
+        reset;
+    }
+
+    if (config.requiresApiKey) {
+      vscode.postMessage({ type: 'getApiKey', provider });
+    } else {
+      elements.apiKeyStatus.textContent = '';
+      elements.apiKeyStatus.className = 'status-text';
+    }
+
+    return reset;
+  }
+
   function handleProviderChange() {
-    const isOpenAI = elements.provider.value === 'openai';
-    elements.apiKeyGroup.style.display = isOpenAI ? 'block' : 'none';
-    elements.localUrlGroup.style.display = isOpenAI ? 'none' : 'block';
-    elements.cleanupGroup.style.display = isOpenAI ? 'block' : 'none';
+    applyProviderUI({
+      transcriptionModel: elements.transcriptionModel.value,
+      cleanupModel: elements.cleanupModel.value,
+    });
     saveSettings();
   }
 
@@ -141,12 +212,14 @@
 
   function saveApiKey() {
     const key = elements.apiKey.value.trim();
-    if (key) {
-      vscode.postMessage({ type: 'saveApiKey', key });
-      elements.apiKeyStatus.textContent = 'API key saved';
-      elements.apiKeyStatus.className = 'status-text success';
-      elements.apiKey.value = '';
-    }
+    if (!key) return;
+    vscode.postMessage({ type: 'saveApiKey', provider: elements.provider.value, key });
+    elements.apiKey.value = '';
+  }
+
+  function clearApiKey() {
+    vscode.postMessage({ type: 'deleteApiKey', provider: elements.provider.value });
+    elements.apiKey.value = '';
   }
 
   function saveSettings() {
@@ -157,6 +230,7 @@
         localApiUrl: elements.localUrl.value,
         enableCleanup: elements.enableCleanup.checked,
         cleanupModel: elements.cleanupModel.value,
+        transcriptionModel: elements.transcriptionModel.value,
         language: elements.language.value,
       },
     });
@@ -551,27 +625,32 @@
     const message = event.data;
 
     switch (message.type) {
-      case 'settingsLoaded':
+      case 'settingsLoaded': {
         elements.provider.value = message.data.provider;
         elements.localUrl.value = message.data.localApiUrl || '';
         elements.enableCleanup.checked = message.data.enableCleanup;
-        // Set cleanup model, fallback to first option if saved value doesn't exist
-        elements.cleanupModel.value = message.data.cleanupModel;
-        if (!elements.cleanupModel.value) {
-          elements.cleanupModel.selectedIndex = 0;
-        }
         elements.language.value = message.data.language || '';
-        handleProviderChange();
+        const modelWasReset = applyProviderUI(message.data);
+        if (modelWasReset) {
+          saveSettings();
+        }
         break;
+      }
 
       case 'historyLoaded':
         renderHistory(message.data);
         break;
 
-      case 'apiKeyLoaded':
-        elements.apiKeyStatus.textContent = message.hasKey ? 'API key is set' : 'No API key saved';
+      case 'apiKeyLoaded': {
+        // Ignore late replies for a provider the user already switched away from
+        if (message.provider !== elements.provider.value) break;
+        const label = PROVIDERS[message.provider].label;
+        elements.apiKeyStatus.textContent = message.hasKey
+          ? `${label} API key is set`
+          : `No ${label} API key saved`;
         elements.apiKeyStatus.className = message.hasKey ? 'status-text success' : 'status-text';
         break;
+      }
 
       case 'uiStateLoaded':
         uiState = message.data;

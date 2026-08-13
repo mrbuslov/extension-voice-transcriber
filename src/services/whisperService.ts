@@ -2,17 +2,16 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { StorageService } from './storageService';
-import { TranscriberSettings } from '../types';
+import { PROVIDERS, TranscriberSettings, assertModelSupported } from '../types';
 import { isFfmpegAvailable, runFfmpeg } from './ffmpeg';
 
 const MAX_FILE_SIZE = 24 * 1024 * 1024; // 24MB (leaving margin for 25MB limit)
 const FAST_PATH_THRESHOLD = 5 * 1024 * 1024; // ≤5MB → single API call (fast path, no ffmpeg needed)
-const CHUNK_SECONDS = 600; // 10 minutes per chunk
 const CHUNK_BITRATE = '128k';
 const MAX_PARALLEL_CHUNKS = 5; // Higher values trigger OpenAI rate limits (429), wasting time on retries
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 1000;
-const REQUEST_TIMEOUT_MS = 60_000; // 1 min per request — fine for ≤10min chunks; large files always go through chunking
+const REQUEST_TIMEOUT_MS = 60_000; // 1 min per request; large files always go through chunking
 
 export class WhisperService {
   constructor(private readonly storage: StorageService) {}
@@ -23,11 +22,18 @@ export class WhisperService {
     settings: TranscriberSettings,
     onProgress?: (message: string, progress?: number) => void
   ): Promise<string> {
-    const apiKey = await this.storage.getApiKey();
+    const config = PROVIDERS[settings.provider];
+    const apiKey = await this.storage.getApiKey(settings.provider);
 
-    if (settings.provider === 'openai' && !apiKey) {
-      throw new Error('Please enter your OpenAI API key in Settings.');
+    if (config.requiresApiKey && !apiKey) {
+      throw new Error(`Please enter your ${config.label} API key in Settings.`);
     }
+    assertModelSupported(
+      config.transcriptionModels,
+      settings.transcriptionModel,
+      settings.provider,
+      'transcription'
+    );
 
     // Fast path: tiny file in a format Whisper accepts directly. Larger files always go
     // through ffmpeg so they get chunked + transcribed in parallel with progress feedback.
@@ -54,14 +60,11 @@ export class WhisperService {
     label: string = 'audio'
   ): Promise<string> {
     const extension = getExtension(mimeType);
+    const config = PROVIDERS[settings.provider];
+    const url = resolveTranscriptionUrl(settings);
 
-    const url =
-      settings.provider === 'openai'
-        ? 'https://api.openai.com/v1/audio/transcriptions'
-        : settings.localApiUrl;
-
-    const headers: Record<string, string> = {};
-    if (apiKey && settings.provider === 'openai') {
+    const headers: Record<string, string> = { ...config.extraHeaders };
+    if (apiKey) {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
@@ -72,7 +75,7 @@ export class WhisperService {
       const blob = new Blob([audioBuffer], { type: mimeType });
       const formData = new FormData();
       formData.append('file', blob, `audio.${extension}`);
-      formData.append('model', 'whisper-1');
+      formData.append('model', settings.transcriptionModel);
       if (settings.language) {
         formData.append('language', settings.language);
       }
@@ -167,7 +170,7 @@ export class WhisperService {
 
       // Stage 2: always split into time-based chunks. Even if the whole transcoded file
       // would fit in one request, chunking gives parallelism + progress feedback + safe
-      // per-request timeouts (each chunk is ≤10min audio, comfortably handled in 60s).
+      // per-request timeouts (chunk length is capped per provider, see chunkSeconds).
       if (onProgress) onProgress('Splitting audio into chunks...', 0);
       const chunkPattern = path.join(workDir, 'chunk-%03d.mp3');
       await runFfmpeg(
@@ -176,7 +179,7 @@ export class WhisperService {
           '-loglevel', 'error',
           '-i', transcodedPath,
           '-f', 'segment',
-          '-segment_time', String(CHUNK_SECONDS),
+          '-segment_time', String(PROVIDERS[settings.provider].chunkSeconds),
           '-c', 'copy',
           '-y',
           chunkPattern,
@@ -250,6 +253,17 @@ export class WhisperService {
     await Promise.all(workers);
     return results;
   }
+}
+
+function resolveTranscriptionUrl(settings: TranscriberSettings): string {
+  const { transcriptionUrl } = PROVIDERS[settings.provider];
+  if (transcriptionUrl) {
+    return transcriptionUrl;
+  }
+  if (!settings.localApiUrl) {
+    throw new Error('Set the Whisper API URL in Settings for the Local/Custom provider.');
+  }
+  return settings.localApiUrl;
 }
 
 function getExtension(mimeType: string): string {

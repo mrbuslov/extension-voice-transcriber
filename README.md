@@ -1,6 +1,6 @@
 # Voice Transcriber
 
-A VS Code extension that records your voice and transcribes it using OpenAI Whisper or a local Whisper-compatible API. Can optionally clean up the text with an LLM.
+A VS Code extension that records your voice and transcribes it using OpenAI Whisper, OpenRouter, or a local Whisper-compatible API. Can optionally clean up the text with an LLM.
 
 <img width="1724" alt="image" src="https://github.com/user-attachments/assets/f2600d73-98c0-42ce-ac12-d6e501078cde" />
 
@@ -10,7 +10,8 @@ A VS Code extension that records your voice and transcribes it using OpenAI Whis
 - Record audio directly in VS Code with real-time visualization
 - Upload audio or video files — audio track is extracted automatically (MP4, MKV, MOV, AVI, WebM)
 - Transcribe long recordings (1hr+) — split into 10-min chunks behind the scenes
-- Transcribe via OpenAI Whisper or your own local server
+- Transcribe via OpenAI, OpenRouter (Whisper, Deepgram Nova-3, GPT-4o Transcribe, Voxtral), or your own local server
+- Separate API key per provider — switching providers doesn't wipe the other key
 - Clean up filler words and fix punctuation with LLM (optional)
 - Keep your last 10 transcriptions
 - Auto-copy results to clipboard
@@ -40,7 +41,7 @@ choco install ffmpeg
 ## Usage
 
 1. Click the microphone icon in the top-right of your editor
-2. Set up your provider (OpenAI or local)
+2. Set up your provider (OpenAI, OpenRouter, or local)
 3. Hit "Start Recording" and speak
 4. Hit "Stop" — text is automatically copied to clipboard
 
@@ -49,6 +50,10 @@ choco install ffmpeg
 ### OpenAI
 
 Get an API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys), select "OpenAI" as provider, paste your key, and save.
+
+### OpenRouter
+
+Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys), select "OpenRouter" as provider, paste your key, and save. One key covers both transcription and LLM cleanup, and you can pick the speech-to-text model under Advanced Settings (Whisper 1, Whisper Large v3 Turbo, GPT-4o Transcribe, Deepgram Nova-3, Voxtral Mini).
 
 ### Local server
 
@@ -61,9 +66,10 @@ Just enter the URL, e.g. `http://localhost:8000/v1/audio/transcriptions`.
 
 ### LLM text cleanup
 
-When using OpenAI, you can enable "Clean up text with LLM" to remove filler words, fix punctuation, and add paragraph breaks.
+With OpenAI or OpenRouter you can enable "Clean up text with LLM" to remove filler words, fix punctuation, and add paragraph breaks. Not available for local servers, which have no chat endpoint.
 
-Models available: gpt-4o-mini (default, cheapest), gpt-4o, gpt-4-turbo, gpt-3.5-turbo.
+OpenAI models: gpt-4.1-nano (default, cheapest), gpt-4.1-mini, gpt-4.1.
+OpenRouter models: gpt-4.1-nano (default), gpt-4.1-mini, gemini-2.5-flash-lite, claude-haiku-4.5, llama-3.3-70b.
 
 ## Languages
 
@@ -91,12 +97,12 @@ Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → "Developer: Open Webview De
 
 ### Large files and video uploads
 
-Recordings over 24 MB are transcoded to 128 kbps MP3 and split into 10-minute chunks, each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
+Recordings over 24 MB are transcoded to 128 kbps MP3 and split into chunks (10 minutes for OpenAI and local, 5 minutes for OpenRouter, which cuts off upstream requests at 60 seconds), each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
 
 ## Privacy
 
 - API keys are stored in VS Code's secure storage (system keychain)
-- Audio goes directly to OpenAI or your local API
+- Audio goes directly to the provider you picked (OpenAI, OpenRouter) or your local API
 - Nothing is saved to disk
 
 ---
@@ -118,6 +124,16 @@ Press F5 to launch the Extension Development Host.
 npm run compile   # build once
 npm run watch     # rebuild on changes
 ```
+
+## Verifying a provider end-to-end
+
+Hits the live API with real audio through the compiled services:
+
+```bash
+npm run compile && OPENROUTER_API_KEY=sk-or-v1-... node scripts/check-provider.js openrouter
+```
+
+Swap in `OPENAI_API_KEY=sk-... node scripts/check-provider.js openai` for OpenAI. Pass an audio file path as a second argument to skip the generated sample (sample generation needs macOS `say` plus ffmpeg).
 
 ## Publishing to VS Code Marketplace
 
