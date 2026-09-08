@@ -250,7 +250,6 @@ button:disabled {
   font-size: 14px;
 }
 
-/* Icon + text pill, so the timestamp action reads as more than one more glyph */
 .labeled-button {
   display: inline-flex;
   align-items: center;

@@ -6,7 +6,7 @@ export interface ModelOption {
 }
 
 export interface TranscriptionModelOption extends ModelOption {
-  /** Verified to return verbose_json segments; false means no timestamps from this model */
+  /** Verified against the live API, not taken from vendor docs */
   supportsTimestamps: boolean;
 }
 
