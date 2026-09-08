@@ -5,6 +5,24 @@ export interface ModelOption {
   label: string;
 }
 
+export interface TranscriptionModelOption extends ModelOption {
+  /** Verified to return verbose_json segments; false means no timestamps from this model */
+  supportsTimestamps: boolean;
+}
+
+export interface TranscriptSegment {
+  /** Seconds from the start of the whole recording, already offset across chunks */
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface TranscriptionResult {
+  text: string;
+  /** Empty when the chosen model cannot produce timestamps */
+  segments: TranscriptSegment[];
+}
+
 export interface ProviderConfig {
   label: string;
   requiresApiKey: boolean;
@@ -19,7 +37,7 @@ export interface ProviderConfig {
   chunkSeconds: number;
   /** Per-request abort deadline. Must clear the provider's worst-case latency for one chunk. */
   requestTimeoutMs: number;
-  transcriptionModels: ModelOption[];
+  transcriptionModels: TranscriptionModelOption[];
   cleanupModels: ModelOption[];
 }
 
@@ -39,7 +57,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     extraHeaders: {},
     chunkSeconds: 600,
     requestTimeoutMs: 60_000,
-    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1' }],
+    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: true }],
     cleanupModels: [
       { id: 'gpt-4.1-nano', label: 'gpt-4.1-nano (default)' },
       { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
@@ -59,12 +77,12 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     // measured runs exceed 60s under load — a tight deadline just burns retries
     requestTimeoutMs: 240_000,
     transcriptionModels: [
-      { id: 'openai/whisper-1', label: 'Whisper 1 (default)' },
-      { id: 'openai/whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo' },
-      { id: 'openai/gpt-4o-mini-transcribe', label: 'GPT-4o Mini Transcribe' },
-      { id: 'openai/gpt-4o-transcribe', label: 'GPT-4o Transcribe' },
-      { id: 'deepgram/nova-3', label: 'Deepgram Nova-3' },
-      { id: 'mistralai/voxtral-mini-transcribe', label: 'Voxtral Mini Transcribe' },
+      { id: 'openai/whisper-1', label: 'Whisper 1 (default)', supportsTimestamps: true },
+      { id: 'openai/whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo', supportsTimestamps: true },
+      { id: 'deepgram/nova-3', label: 'Deepgram Nova-3', supportsTimestamps: true },
+      { id: 'openai/gpt-4o-mini-transcribe', label: 'GPT-4o Mini Transcribe (no timestamps)', supportsTimestamps: false },
+      { id: 'openai/gpt-4o-transcribe', label: 'GPT-4o Transcribe (no timestamps)', supportsTimestamps: false },
+      { id: 'mistralai/voxtral-mini-transcribe', label: 'Voxtral Mini Transcribe (no timestamps)', supportsTimestamps: false },
     ],
     cleanupModels: [
       { id: 'openai/gpt-4.1-nano', label: 'gpt-4.1-nano (default)' },
@@ -84,7 +102,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     extraHeaders: {},
     chunkSeconds: 600,
     requestTimeoutMs: 60_000,
-    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1' }],
+    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: false }],
     cleanupModels: [],
   },
 };
@@ -94,6 +112,16 @@ export function defaultModel(models: ModelOption[]): string {
     throw new Error('Provider has no models configured');
   }
   return models[0].id;
+}
+
+export function findTranscriptionModel(provider: Provider, modelId: string): TranscriptionModelOption {
+  const model = PROVIDERS[provider].transcriptionModels.find((m) => m.id === modelId);
+  if (!model) {
+    throw new Error(
+      `${modelId} is not a valid transcription model for ${PROVIDERS[provider].label}. Pick one in Settings.`
+    );
+  }
+  return model;
 }
 
 export function assertModelSupported(
@@ -161,7 +189,7 @@ export type MessageToWebview =
   | { type: 'recordingTime'; elapsed: number }
   | { type: 'transcriptionStart' }
   | { type: 'transcriptionProgress'; message: string; progress?: number }
-  | { type: 'transcriptionComplete'; text: string; cleaned?: string }
+  | { type: 'transcriptionComplete'; text: string; cleaned?: string; hasTimestamps: boolean }
   | { type: 'transcriptionError'; message: string }
   | { type: 'partialTranscription'; text: string }
   | { type: 'sessionRecovery'; session: RecordingSession }
@@ -182,6 +210,7 @@ export type MessageFromWebview =
   | { type: 'transcribe'; audioData: string; mimeType: string }
   | { type: 'saveSession'; session: RecordingSession | null }
   | { type: 'copyToClipboard'; text: string }
+  | { type: 'copyWithTimestamps' }
   | { type: 'insertToEditor'; text: string }
   | { type: 'saveAudio'; audioData: string; mimeType: string }
   | { type: 'uploadAudio'; audioData: string; mimeType: string; filename: string }

@@ -46,6 +46,7 @@
     editToggleBtn: document.getElementById('edit-toggle-btn'),
     insertBtn: document.getElementById('insert-btn'),
     copyBtn: document.getElementById('copy-btn'),
+    copyTimestampsBtn: document.getElementById('copy-timestamps-btn'),
     historyList: document.getElementById('history-list'),
     clearHistoryBtn: document.getElementById('clear-history-btn'),
     recoveryModal: document.getElementById('recovery-modal'),
@@ -101,6 +102,9 @@
     elements.editToggleBtn.addEventListener('click', toggleEditMode);
     elements.insertBtn.addEventListener('click', insertToEditor);
     elements.copyBtn.addEventListener('click', copyTranscription);
+    elements.copyTimestampsBtn.addEventListener('click', () =>
+      vscode.postMessage({ type: 'copyWithTimestamps' })
+    );
     elements.clearHistoryBtn.addEventListener('click', clearHistory);
 
     elements.recoverBtn.addEventListener('click', recoverSession);
@@ -452,6 +456,7 @@
     elements.transcriptionText.value = text;
     elements.transcriptionSection.style.display = 'block';
     elements.transcriptionSection.classList.add('visible');
+    elements.copyTimestampsBtn.style.display = 'none';
   }
 
   function renderHistory(history) {
@@ -698,6 +703,7 @@
 
       case 'transcriptionStart':
         showProgress('Starting transcription...');
+        elements.copyTimestampsBtn.style.display = 'none';
         break;
 
       case 'transcriptionProgress':
@@ -708,6 +714,9 @@
         hideProgress();
         const finalText = message.cleaned || message.text;
         showTranscription(finalText);
+        if (message.hasTimestamps) {
+          elements.copyTimestampsBtn.style.display = 'inline-flex';
+        }
 
         vscode.postMessage({
           type: 'addToHistory',

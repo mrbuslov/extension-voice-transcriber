@@ -12,6 +12,7 @@ A VS Code extension that records your voice and transcribes it using OpenAI Whis
 - Transcribe long recordings (1hr+) — split into 10-min chunks behind the scenes
 - Transcribe via OpenAI, OpenRouter (Whisper, Deepgram Nova-3, GPT-4o Transcribe, Voxtral), or your own local server
 - Separate API key per provider — switching providers doesn't wipe the other key
+- Copy the transcript with per-phrase timestamps as SRT, WebVTT, or plain `[hh:mm:ss]` lines
 - Clean up filler words and fix punctuation with LLM (optional)
 - Keep your last 10 transcriptions
 - Auto-copy results to clipboard
@@ -70,6 +71,29 @@ With OpenAI or OpenRouter you can enable "Clean up text with LLM" to remove fill
 
 OpenAI models: gpt-4.1-nano (default, cheapest), gpt-4.1-mini, gpt-4.1.
 OpenRouter models: gpt-4.1-nano (default), gpt-4.1-mini, gemini-2.5-flash-lite, claude-haiku-4.5, llama-3.3-70b.
+
+## Timestamps and subtitles
+
+After a transcription finishes, a **SRT** button appears next to the copy button in the Transcription header. It offers three formats:
+
+- **SubRip (SRT)** — the subtitle standard, read by YouTube, Premiere, DaVinci, VLC
+- **WebVTT** — the web subtitle standard, for `<track>` elements and HTML5 players
+- **Plain text with timestamps** — one `[hh:mm:ss] phrase` line, for notes and chat
+
+The plain copy button is unchanged and still copies just the text, and transcriptions still auto-copy as plain text.
+
+Timings are stitched across chunks, so an hour-long recording gives one continuous timeline. Not every model can produce them — the model picker marks those that cannot:
+
+| model | timestamps |
+|---|---|
+| `whisper-1` (OpenAI and OpenRouter) | yes |
+| `openai/whisper-large-v3-turbo` | yes |
+| `deepgram/nova-3` | yes |
+| `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe` | no |
+| `mistralai/voxtral-mini-transcribe` | no |
+| Local/Custom server | not wired |
+
+With LLM cleanup enabled the timestamps come from the raw transcript, because cleanup rewrites and merges sentences and the alignment no longer holds.
 
 ## Languages
 

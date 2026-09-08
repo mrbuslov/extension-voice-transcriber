@@ -9,9 +9,11 @@ import {
   MessageToWebview,
   HistoryEntry,
   RecordingCapabilities,
+  TranscriptSegment,
   LANGUAGES,
   PROVIDERS,
 } from './types';
+import { TRANSCRIPT_FORMATS, formatTranscript, TranscriptFormatId } from './services/transcriptFormats';
 
 export class VoiceTranscriberPanel {
   public static readonly viewType = 'voiceTranscriber.panel';
@@ -27,6 +29,7 @@ export class VoiceTranscriberPanel {
   private _recordingTimer: NodeJS.Timeout | null = null;
   private _lastAudioBuffer: Buffer | null = null;
   private _lastAudioMimeType: string | null = null;
+  private _lastSegments: TranscriptSegment[] = [];
   private _disposables: vscode.Disposable[] = [];
 
   public static createOrShow(context: vscode.ExtensionContext) {
@@ -114,6 +117,10 @@ export class VoiceTranscriberPanel {
 
       case 'saveSession':
         await this._storage.saveRecordingSession(message.session);
+        break;
+
+      case 'copyWithTimestamps':
+        await this._copyWithTimestamps();
         break;
 
       case 'copyToClipboard':
@@ -239,6 +246,7 @@ export class VoiceTranscriberPanel {
     try {
       this._lastAudioBuffer = null;
       this._lastAudioMimeType = null;
+      this._lastSegments = [];
       await this._audioRecorder.start();
       this._postMessage({ type: 'recordingStarted' });
 
@@ -345,9 +353,11 @@ export class VoiceTranscriberPanel {
 
       this._postMessage({ type: 'transcriptionProgress', message: 'Transcribing audio...' });
 
-      const rawText = await this._whisper.transcribe(audioBuffer, mimeType, settings, (message, progress) => {
+      const transcription = await this._whisper.transcribe(audioBuffer, mimeType, settings, (message, progress) => {
         this._postMessage({ type: 'transcriptionProgress', message, progress });
       });
+      const rawText = transcription.text;
+      this._lastSegments = transcription.segments;
 
       let cleanedText: string | undefined;
 
@@ -367,6 +377,7 @@ export class VoiceTranscriberPanel {
         type: 'transcriptionComplete',
         text: rawText,
         cleaned: cleanedText,
+        hasTimestamps: this._lastSegments.length > 0,
       });
 
       await this._storage.saveRecordingSession(null);
@@ -375,6 +386,35 @@ export class VoiceTranscriberPanel {
       this._postMessage({ type: 'transcriptionError', message });
       vscode.window.showErrorMessage(message);
     }
+  }
+
+  private async _copyWithTimestamps(): Promise<void> {
+    if (this._lastSegments.length === 0) {
+      vscode.window.showWarningMessage(
+        'This transcription has no timestamps. Pick a transcription model that supports them in Settings.'
+      );
+      return;
+    }
+
+    const picked = await vscode.window.showQuickPick(
+      TRANSCRIPT_FORMATS.map((spec) => ({
+        label: spec.label,
+        description: spec.description,
+        formatId: spec.id,
+      })),
+      {
+        title: `Copy ${this._lastSegments.length} timestamped segments`,
+        placeHolder: 'Pick a format',
+      }
+    );
+
+    if (!picked) {
+      return;
+    }
+
+    const content = formatTranscript(this._lastSegments, picked.formatId as TranscriptFormatId);
+    await vscode.env.clipboard.writeText(content);
+    vscode.window.showInformationMessage(`Copied as ${picked.label}`);
   }
 
   private async _saveAudioFile(audioData: string, mimeType: string) {
@@ -575,6 +615,12 @@ export class VoiceTranscriberPanel {
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
             </svg>
+          </button>
+          <button id="copy-timestamps-btn" class="icon-button labeled-button" style="display: none;" title="Copy with timestamps — SRT, WebVTT, or plain text">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm.01 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+            </svg>
+            <span>SRT</span>
           </button>
           <button id="copy-btn" class="icon-button" title="Copy text to clipboard">&#128203;</button>
         </div>

@@ -4,8 +4,8 @@
  * against the live API with real audio. Only VS Code's secret vault is stubbed.
  *
  * Usage:
- *   OPENROUTER_API_KEY=sk-or-... node scripts/check-provider.js openrouter [audio-file]
- *   OPENAI_API_KEY=sk-...        node scripts/check-provider.js openai     [audio-file]
+ *   OPENROUTER_API_KEY=sk-or-... node scripts/check-provider.js openrouter [audio-file] [stt-model]
+ *   OPENAI_API_KEY=sk-...        node scripts/check-provider.js openai     [audio-file] [stt-model]
  *
  * Without an audio file, a short spoken sample is generated (macOS `say` + ffmpeg).
  */
@@ -17,6 +17,7 @@ const { execFileSync } = require('child_process');
 const { PROVIDERS, defaultSettings, defaultModel } = require('../out/types');
 const { WhisperService } = require('../out/services/whisperService');
 const { CleanupService } = require('../out/services/cleanupService');
+const { formatTranscript } = require('../out/services/transcriptFormats');
 
 const SAMPLE_SENTENCE =
   'Um, this is, uh, a test recording for the voice transcriber extension, you know, testing one two three.';
@@ -62,7 +63,7 @@ async function main() {
     ...defaultSettings,
     provider,
     enableCleanup: true,
-    transcriptionModel: defaultModel(PROVIDERS[provider].transcriptionModels),
+    transcriptionModel: process.argv[4] || defaultModel(PROVIDERS[provider].transcriptionModels),
     cleanupModel: defaultModel(PROVIDERS[provider].cleanupModels),
   };
 
@@ -73,11 +74,25 @@ async function main() {
   const raw = await new WhisperService(storage).transcribe(audioBuffer, mimeFor(audioFile), settings, (m, p) =>
     console.log(`  [progress] ${m}${typeof p === 'number' ? ` ${(p * 100).toFixed(0)}%` : ''}`)
   );
-  console.log(`\nTRANSCRIPT (${Date.now() - started}ms):\n${raw}\n`);
+  console.log(`\nTRANSCRIPT (${Date.now() - started}ms): ${raw.text.length} chars, ${raw.segments.length} segments`);
+  console.log(raw.text.slice(0, 300) + (raw.text.length > 300 ? ' […]' : '') + '\n');
+
+  if (raw.segments.length > 0) {
+    const last = raw.segments[raw.segments.length - 1];
+    console.log(`SEGMENT RANGE: ${raw.segments[0].start.toFixed(2)}s .. ${last.end.toFixed(2)}s`);
+    const monotonic = raw.segments.every((s, i) => i === 0 || s.start >= raw.segments[i - 1].start);
+    console.log(`MONOTONIC: ${monotonic}`);
+    console.log('\nSRT (first 3 cues):');
+    console.log(formatTranscript(raw.segments.slice(0, 3), 'srt'));
+    console.log('PLAIN (last 2 lines):');
+    console.log(formatTranscript(raw.segments.slice(-2), 'plain') + '\n');
+  } else {
+    console.log('SEGMENTS: none (model does not support timestamps)\n');
+  }
 
   const cleanStarted = Date.now();
-  const cleaned = await new CleanupService(storage).cleanupText(raw, settings);
-  console.log(`CLEANED (${Date.now() - cleanStarted}ms):\n${cleaned}`);
+  const cleaned = await new CleanupService(storage).cleanupText(raw.text, settings);
+  console.log(`CLEANED (${Date.now() - cleanStarted}ms):\n${cleaned.slice(0, 200)}`);
 }
 
 main().catch((error) => {

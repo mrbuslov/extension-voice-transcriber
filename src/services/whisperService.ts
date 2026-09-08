@@ -2,7 +2,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { StorageService } from './storageService';
-import { PROVIDERS, TranscriberSettings, assertModelSupported } from '../types';
+import {
+  PROVIDERS,
+  TranscriberSettings,
+  TranscriptSegment,
+  TranscriptionResult,
+  findTranscriptionModel,
+} from '../types';
 import { isFfmpegAvailable, runFfmpeg } from './ffmpeg';
 
 const MAX_FILE_SIZE = 24 * 1024 * 1024; // 24MB (leaving margin for 25MB limit)
@@ -20,19 +26,14 @@ export class WhisperService {
     mimeType: string,
     settings: TranscriberSettings,
     onProgress?: (message: string, progress?: number) => void
-  ): Promise<string> {
+  ): Promise<TranscriptionResult> {
     const config = PROVIDERS[settings.provider];
     const apiKey = await this.storage.getApiKey(settings.provider);
 
     if (config.requiresApiKey && !apiKey) {
       throw new Error(`Please enter your ${config.label} API key in Settings.`);
     }
-    assertModelSupported(
-      config.transcriptionModels,
-      settings.transcriptionModel,
-      settings.provider,
-      'transcription'
-    );
+    findTranscriptionModel(settings.provider, settings.transcriptionModel);
 
     // Fast path: tiny file in a format Whisper accepts directly. Larger files always go
     // through ffmpeg so they get chunked + transcribed in parallel with progress feedback.
@@ -57,11 +58,15 @@ export class WhisperService {
     settings: TranscriberSettings,
     apiKey: string | undefined,
     label: string = 'audio'
-  ): Promise<string> {
+  ): Promise<TranscriptionResult> {
     const extension = getExtension(mimeType);
     const config = PROVIDERS[settings.provider];
     const url = resolveTranscriptionUrl(settings);
     const requestTimeoutMs = config.requestTimeoutMs;
+    const wantsTimestamps = findTranscriptionModel(
+      settings.provider,
+      settings.transcriptionModel
+    ).supportsTimestamps;
 
     const headers: Record<string, string> = { ...config.extraHeaders };
     if (apiKey) {
@@ -76,6 +81,10 @@ export class WhisperService {
       const formData = new FormData();
       formData.append('file', blob, `audio.${extension}`);
       formData.append('model', settings.transcriptionModel);
+      if (wantsTimestamps) {
+        // verbose_json already returns segments; no timestamp_granularities needed
+        formData.append('response_format', 'verbose_json');
+      }
       if (settings.language) {
         formData.append('language', settings.language);
       }
@@ -108,9 +117,12 @@ export class WhisperService {
       clearTimeout(timeoutId);
 
       if (response.ok) {
-        const result = (await response.json()) as { text: string };
-        console.log(`[WhisperService:${label}] Success in ${Date.now() - startedAt}ms, ${result.text.length} chars`);
-        return result.text;
+        const result = (await response.json()) as RawTranscription;
+        const segments = wantsTimestamps ? parseSegments(result, settings.transcriptionModel) : [];
+        console.log(
+          `[WhisperService:${label}] Success in ${Date.now() - startedAt}ms, ${result.text.length} chars, ${segments.length} segments`
+        );
+        return { text: result.text, segments };
       }
 
       const errorData = (await response.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -140,7 +152,7 @@ export class WhisperService {
     settings: TranscriberSettings,
     apiKey: string | undefined,
     onProgress?: (message: string, progress?: number) => void
-  ): Promise<string> {
+  ): Promise<TranscriptionResult> {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-transcriber-chunks-'));
     const inputExt = getExtension(mimeType) || 'bin';
     const inputPath = path.join(workDir, `input.${inputExt}`);
@@ -173,6 +185,7 @@ export class WhisperService {
       // per-request timeouts (chunk length is capped per provider, see chunkSeconds).
       if (onProgress) onProgress('Splitting audio into chunks...', 0);
       const chunkPattern = path.join(workDir, 'chunk-%03d.mp3');
+      const chunkListPath = path.join(workDir, 'chunks.csv');
       await runFfmpeg(
         [
           '-hide_banner',
@@ -180,6 +193,8 @@ export class WhisperService {
           '-i', transcodedPath,
           '-f', 'segment',
           '-segment_time', String(PROVIDERS[settings.provider].chunkSeconds),
+          '-segment_list', chunkListPath,
+          '-segment_list_type', 'csv',
           '-c', 'copy',
           '-y',
           chunkPattern,
@@ -201,12 +216,14 @@ export class WhisperService {
       let completed = 0;
       if (onProgress) onProgress(`Transcribing ${total} chunks in parallel...`, 0);
 
+      const chunkStarts = parseChunkStarts(fs.readFileSync(chunkListPath, 'utf8'));
+
       const results = await this.mapWithConcurrency(
         chunkFiles,
         MAX_PARALLEL_CHUNKS,
         async (name, idx) => {
           const chunkBuffer = fs.readFileSync(path.join(workDir, name));
-          const text = await this.transcribeSingle(
+          const result = await this.transcribeSingle(
             chunkBuffer,
             'audio/mpeg',
             settings,
@@ -217,11 +234,18 @@ export class WhisperService {
           if (onProgress) {
             onProgress(`Transcribed ${completed}/${total} chunks...`, completed / total);
           }
-          return text;
+          const offset = chunkStarts.get(name);
+          if (offset === undefined) {
+            throw new Error(`ffmpeg segment list has no start time for ${name}`);
+          }
+          return shiftSegments(result, offset);
         }
       );
 
-      return results.join(' ');
+      return {
+        text: results.map((result) => result.text).join(' '),
+        segments: results.flatMap((result) => result.segments),
+      };
     } finally {
       // Best-effort cleanup
       try {
@@ -253,6 +277,55 @@ export class WhisperService {
     await Promise.all(workers);
     return results;
   }
+}
+
+interface RawTranscription {
+  text: string;
+  segments?: Array<{ start: number; end: number; text: string }>;
+}
+
+function parseSegments(raw: RawTranscription, modelId: string): TranscriptSegment[] {
+  if (!raw.segments) {
+    throw new Error(
+      `${modelId} is listed as supporting timestamps but returned no segments. Pick another transcription model in Settings.`
+    );
+  }
+  return raw.segments.map((segment) => ({
+    start: segment.start,
+    end: segment.end,
+    text: segment.text.trim(),
+  }));
+}
+
+function shiftSegments(result: TranscriptionResult, offsetSeconds: number): TranscriptionResult {
+  if (offsetSeconds === 0) {
+    return result;
+  }
+  return {
+    text: result.text,
+    segments: result.segments.map((segment) => ({
+      start: segment.start + offsetSeconds,
+      end: segment.end + offsetSeconds,
+      text: segment.text,
+    })),
+  };
+}
+
+/** ffmpeg's csv segment list: `chunk-000.mp3,0.000000,300.024000` */
+function parseChunkStarts(csv: string): Map<string, number> {
+  const starts = new Map<string, number>();
+  for (const line of csv.split(/\r?\n/)) {
+    if (!line.trim()) {
+      continue;
+    }
+    const [name, start] = line.split(',');
+    const parsed = Number(start);
+    if (!name || Number.isNaN(parsed)) {
+      throw new Error(`Unparseable ffmpeg segment list line: ${line}`);
+    }
+    starts.set(name, parsed);
+  }
+  return starts;
 }
 
 function resolveTranscriptionUrl(settings: TranscriberSettings): string {

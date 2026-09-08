@@ -2,6 +2,20 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.2.0] - 2026-09-08
+
+### Added
+- **Timestamps.** A new button in the Transcription header copies the transcript with per-phrase timings, in your pick of **SubRip (SRT)**, **WebVTT**, or plain `[hh:mm:ss]` lines. Plain text copy is untouched and still the default — the existing copy button and auto-copy to clipboard behave exactly as before
+- Timestamps are stitched across chunks, so a 1-hour recording produces one continuous timeline instead of restarting at zero every 5 or 10 minutes. Offsets come from ffmpeg's own segment list rather than being assumed from chunk length, so no drift accumulates
+
+### Changed
+- Transcription models now declare whether they can produce timestamps, and the picker labels the ones that cannot. Verified against the live API: Whisper 1, Whisper Large v3 Turbo and Deepgram Nova-3 return timings; GPT-4o Transcribe, GPT-4o Mini Transcribe and Voxtral Mini reject `verbose_json` and are marked "no timestamps"
+- The timestamp button only appears when the transcript on screen actually has timings, so it never offers timings that belong to a different transcription
+
+### Notes
+- With LLM cleanup enabled, timestamps come from the raw transcript — cleanup merges and rewrites sentences, which destroys alignment
+- Local/Custom servers are not wired for timestamps: their behaviour is byte-identical to before, since an arbitrary Whisper-compatible server may not implement `verbose_json`
+
 ## [1.1.1] - 2026-08-13
 
 ### Fixed
