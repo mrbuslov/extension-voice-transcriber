@@ -1,52 +1,9 @@
-import { spawn, execSync } from 'child_process';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
-import * as path from 'path';
-
-let cachedFfmpegPath: string | null | undefined = undefined;
-
-function checkExecutable(execPath: string): boolean {
-  try {
-    fs.accessSync(execPath, fs.constants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { findExecutable, runProcess, ProcessOutput } from './executables';
 
 export function getFfmpegPath(): string | null {
-  if (cachedFfmpegPath !== undefined) {
-    return cachedFfmpegPath;
-  }
-
-  const platform = process.platform;
-
-  // On macOS, check Homebrew paths directly (VS Code doesn't inherit shell PATH)
-  if (platform === 'darwin') {
-    const homebrewPaths = ['/opt/homebrew/bin', '/usr/local/bin'];
-    for (const brewPath of homebrewPaths) {
-      const ffmpegPath = path.join(brewPath, 'ffmpeg');
-      if (checkExecutable(ffmpegPath)) {
-        cachedFfmpegPath = ffmpegPath;
-        return ffmpegPath;
-      }
-    }
-  }
-
-  // Fallback: use which/where
-  const whichCommand = platform === 'win32' ? 'where' : 'which';
-  try {
-    const output = execSync(`${whichCommand} ffmpeg`, { encoding: 'utf8' }).trim();
-    const firstLine = output.split(/\r?\n/)[0].trim();
-    if (firstLine && checkExecutable(firstLine)) {
-      cachedFfmpegPath = firstLine;
-      return firstLine;
-    }
-  } catch {
-    // Not found
-  }
-
-  cachedFfmpegPath = null;
-  return null;
+  return findExecutable('ffmpeg');
 }
 
 export function isFfmpegAvailable(): boolean {
@@ -64,52 +21,12 @@ export function getInstallInstructions(): string {
   return 'sudo apt install ffmpeg';
 }
 
-export interface RunFfmpegOptions {
-  captureStderr?: boolean;
-}
-
-export interface RunFfmpegResult {
-  stderr: string;
-  exitCode: number;
-}
-
-/**
- * Run ffmpeg with the given arguments, returning exit code and optionally captured stderr.
- * Throws if ffmpeg is not available or exits with non-zero.
- */
-export function runFfmpeg(args: string[], opts: RunFfmpegOptions = {}): Promise<RunFfmpegResult> {
-  return new Promise((resolve, reject) => {
-    const ffmpegPath = getFfmpegPath();
-    if (!ffmpegPath) {
-      reject(new Error('FFMPEG_NOT_FOUND'));
-      return;
-    }
-
-    const proc = spawn(ffmpegPath, args, {
-      stdio: ['ignore', 'ignore', opts.captureStderr ? 'pipe' : 'ignore'],
-    });
-
-    let stderr = '';
-    if (opts.captureStderr && proc.stderr) {
-      proc.stderr.on('data', (chunk: Buffer) => {
-        stderr += chunk.toString('utf8');
-        // Keep last ~8KB to avoid unbounded memory
-        if (stderr.length > 8192) {
-          stderr = stderr.slice(stderr.length - 8192);
-        }
-      });
-    }
-
-    proc.on('error', (err) => reject(err));
-    proc.on('close', (code) => {
-      const exitCode = code ?? -1;
-      if (exitCode !== 0) {
-        reject(new Error(`ffmpeg exited with code ${exitCode}${stderr ? `: ${stderr.trim().split('\n').slice(-3).join(' | ')}` : ''}`));
-        return;
-      }
-      resolve({ stderr, exitCode });
-    });
-  });
+export function runFfmpeg(args: string[]): Promise<ProcessOutput> {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath) {
+    return Promise.reject(new Error('FFMPEG_NOT_FOUND'));
+  }
+  return runProcess(ffmpegPath, args);
 }
 
 /**

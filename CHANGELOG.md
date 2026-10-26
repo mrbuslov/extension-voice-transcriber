@@ -2,6 +2,18 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.3.0] - 2026-10-26
+
+### Added
+- **Docker (local Whisper) provider.** Transcribe on your own CPU, free and offline, with no API key and no audio leaving your machine. Pick it in Settings with Docker running and the extension builds the image, downloads the Whisper `small` model once (~500 MB, cached in a Docker volume), and manages one named container (`voice-transcriber-whisper`)
+- The container is started for each transcription and stopped right after, so it holds no CPU or RAM between runs. A container left over from an older version of the extension's server files is recreated automatically
+- **CPU threads** setting (Advanced Settings, Docker only). It defaults to a quarter of your cores, at most 4, and the container is hard-capped to that many CPUs and 2 GB of RAM, so a long video never takes over the machine
+- Timestamps (SRT / WebVTT / plain) work with the Docker provider, and the language picker is honoured
+
+### Notes
+- Silence is skipped by voice activity detection, so long pauses don't turn into hallucinated text, with enough padding that short phrases at the start of a chunk are kept
+- With 3 threads on an Apple M4 Pro, a minute of speech takes about 15-25 seconds, plus ~10-15 seconds to start the container and load the model
+
 ## [1.2.1] - 2026-10-26
 
 ### Fixed

@@ -1,6 +1,6 @@
 # Voice Transcriber
 
-A VS Code extension that records your voice and transcribes it using OpenAI Whisper, OpenRouter, or a local Whisper-compatible API. Can optionally clean up the text with an LLM.
+A VS Code extension that records your voice and transcribes it using OpenAI Whisper, OpenRouter, Whisper running in Docker on your own machine, or a local Whisper-compatible API. Can optionally clean up the text with an LLM.
 
 <img width="1724" alt="image" src="https://github.com/user-attachments/assets/f2600d73-98c0-42ce-ac12-d6e501078cde" />
 
@@ -10,7 +10,7 @@ A VS Code extension that records your voice and transcribes it using OpenAI Whis
 - Record audio directly in VS Code with real-time visualization
 - Upload audio or video files — audio track is extracted automatically (MP4, MKV, MOV, AVI, WebM)
 - Transcribe long recordings (1hr+) — split into 10-min chunks behind the scenes
-- Transcribe via OpenAI, OpenRouter (Whisper, Deepgram Nova-3, GPT-4o Transcribe, Voxtral), or your own local server
+- Transcribe via OpenAI, OpenRouter (Whisper, Deepgram Nova-3, GPT-4o Transcribe, Voxtral), Whisper in Docker (offline, free), or your own local server
 - Separate API key per provider — switching providers doesn't wipe the other key
 - Copy the transcript with per-phrase timestamps as SRT, WebVTT, or plain `[hh:mm:ss]` lines
 - Clean up filler words and fix punctuation with LLM (optional)
@@ -56,6 +56,16 @@ Get an API key from [platform.openai.com/api-keys](https://platform.openai.com/a
 
 Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys), select "OpenRouter" as provider, paste your key, and save. One key covers both transcription and LLM cleanup, and you can pick the speech-to-text model under Advanced Settings (Whisper 1, Whisper Large v3 Turbo, GPT-4o Transcribe, Deepgram Nova-3, Voxtral Mini).
 
+### Docker (local Whisper)
+
+Pick "Docker (local Whisper)" to transcribe on your own CPU, with no API key and no audio leaving your machine. Docker must be installed and running; the extension does the rest:
+
+- The first run builds a small image (`voice-transcriber-whisper`) and downloads the Whisper `small` model (~500 MB) into the `voice-transcriber-whisper-models` volume, so later runs skip both
+- Every transcription starts the `voice-transcriber-whisper` container and stops it when done, so it holds no CPU or RAM in between. Starting it and loading the model takes ~10-15 seconds
+- **CPU threads** (Advanced Settings) defaults to a quarter of your cores, at most 4, and the container is capped to exactly that many CPUs and 2 GB of RAM. More threads finish sooner but load your machine harder; past 4, Whisper in Docker gets slower rather than faster
+- On an Apple M4 Pro with 3 threads, a minute of speech takes about 15-25 seconds
+- The server listens on `127.0.0.1:47913` only. If the extension's server files change in an update, the container is recreated automatically
+
 ### Local server
 
 Any Whisper-compatible API works:
@@ -91,6 +101,7 @@ Timings are stitched across chunks, so an hour-long recording gives one continuo
 | `deepgram/nova-3` | yes |
 | `openai/gpt-4o-transcribe`, `openai/gpt-4o-mini-transcribe` | no |
 | `mistralai/voxtral-mini-transcribe` | no |
+| Docker (local Whisper) | yes |
 | Local/Custom server | not wired |
 
 With LLM cleanup enabled the timestamps come from the raw transcript, because cleanup rewrites and merges sentences and the alignment no longer holds.
@@ -117,16 +128,17 @@ Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) → "Developer: Open Webview De
 
 - Check your API key
 - For local API — make sure the server is running and URL is correct
+- For Docker — make sure Docker Desktop is running; `docker logs voice-transcriber-whisper` shows the server's log
 - Check your internet connection
 
 ### Large files and video uploads
 
-Recordings over 24 MB are transcoded to 128 kbps MP3 and split into chunks (10 minutes for OpenAI and local, 5 minutes for OpenRouter, whose routing overhead makes long chunks much slower), each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
+Recordings over 24 MB are transcoded to 128 kbps MP3 and split into chunks (10 minutes for OpenAI and local, 5 minutes for OpenRouter, whose routing overhead makes long chunks much slower, 2 minutes for Docker so progress keeps moving on a CPU), each transcribed separately and concatenated. Video uploads (MP4, MKV, MOV, AVI, WebM) have their audio track extracted automatically. Both features require ffmpeg.
 
 ## Privacy
 
 - API keys are stored in VS Code's secure storage (system keychain)
-- Audio goes directly to the provider you picked (OpenAI, OpenRouter) or your local API
+- Audio goes directly to the provider you picked (OpenAI, OpenRouter) or your local API; with Docker it never leaves your machine
 - Nothing is saved to disk
 
 ---
@@ -157,7 +169,7 @@ Hits the live API with real audio through the compiled services:
 npm run compile && OPENROUTER_API_KEY=sk-or-v1-... node scripts/check-provider.js openrouter
 ```
 
-Swap in `OPENAI_API_KEY=sk-... node scripts/check-provider.js openai` for OpenAI. Pass an audio file path as a second argument to skip the generated sample (sample generation needs macOS `say` plus ffmpeg).
+Swap in `OPENAI_API_KEY=sk-... node scripts/check-provider.js openai` for OpenAI, or `node scripts/check-provider.js docker` for the Docker provider (needs Docker running). Pass an audio file path as a second argument to skip the generated sample (sample generation needs macOS `say` plus ffmpeg).
 
 ## Publishing to VS Code Marketplace
 

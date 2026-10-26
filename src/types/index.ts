@@ -1,4 +1,6 @@
-export type Provider = 'openai' | 'openrouter' | 'local';
+import * as os from 'os';
+
+export type Provider = 'openai' | 'openrouter' | 'local' | 'docker';
 
 export interface ModelOption {
   id: string;
@@ -23,8 +25,12 @@ export interface TranscriptionResult {
   segments: TranscriptSegment[];
 }
 
+/** openaiMultipart: OpenAI's /audio/transcriptions form. rawBody: audio bytes as the body, language as a query param. */
+export type TranscriptionRequestFormat = 'openaiMultipart' | 'rawBody';
+
 export interface ProviderConfig {
   label: string;
+  hint: string | null;
   requiresApiKey: boolean;
   keyPlaceholder: string;
   keysUrl: string;
@@ -33,12 +39,31 @@ export interface ProviderConfig {
   /** null → provider has no chat endpoint, so LLM cleanup is unavailable */
   chatUrl: string | null;
   extraHeaders: Record<string, string>;
+  requestFormat: TranscriptionRequestFormat;
   /** Audio seconds per chunk when a file has to be split — bounded by the provider's request timeout */
   chunkSeconds: number;
   /** Per-request abort deadline. Must clear the provider's worst-case latency for one chunk. */
   requestTimeoutMs: number;
+  /** OpenAI starts returning 429 above 5; a server that transcribes one request at a time needs 1 */
+  maxParallelChunks: number;
   transcriptionModels: TranscriptionModelOption[];
   cleanupModels: ModelOption[];
+}
+
+export const DOCKER_WHISPER = {
+  containerName: 'voice-transcriber-whisper',
+  imageRepository: 'voice-transcriber-whisper',
+  modelsVolume: 'voice-transcriber-whisper-models',
+  /** Off the common 8000/9000 so it doesn't collide with other local services */
+  hostPort: 47913,
+  containerPort: 9000,
+  model: 'small',
+  memoryLimit: '2g',
+};
+
+/** A quarter of the cores, at most 4: past 4 threads ctranslate2 inside Docker gets slower, not faster */
+export function defaultDockerCpuThreads(): number {
+  return Math.max(1, Math.min(4, Math.floor(os.availableParallelism() / 4)));
 }
 
 const OPENROUTER_ATTRIBUTION_HEADERS = {
@@ -49,14 +74,17 @@ const OPENROUTER_ATTRIBUTION_HEADERS = {
 export const PROVIDERS: Record<Provider, ProviderConfig> = {
   openai: {
     label: 'OpenAI',
+    hint: null,
     requiresApiKey: true,
     keyPlaceholder: 'sk-...',
     keysUrl: 'https://platform.openai.com/api-keys',
     transcriptionUrl: 'https://api.openai.com/v1/audio/transcriptions',
     chatUrl: 'https://api.openai.com/v1/chat/completions',
     extraHeaders: {},
+    requestFormat: 'openaiMultipart',
     chunkSeconds: 600,
     requestTimeoutMs: 60_000,
+    maxParallelChunks: 5,
     transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: true }],
     cleanupModels: [
       { id: 'gpt-4.1-nano', label: 'gpt-4.1-nano (default)' },
@@ -66,16 +94,19 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
   },
   openrouter: {
     label: 'OpenRouter',
+    hint: null,
     requiresApiKey: true,
     keyPlaceholder: 'sk-or-v1-...',
     keysUrl: 'https://openrouter.ai/keys',
     transcriptionUrl: 'https://openrouter.ai/api/v1/audio/transcriptions',
     chatUrl: 'https://openrouter.ai/api/v1/chat/completions',
     extraHeaders: OPENROUTER_ATTRIBUTION_HEADERS,
+    requestFormat: 'openaiMultipart',
     chunkSeconds: 300,
     // Routing + queueing on top of Whisper puts a 5-min chunk in the 25-60s range, and
     // measured runs exceed 60s under load — a tight deadline just burns retries
     requestTimeoutMs: 240_000,
+    maxParallelChunks: 5,
     transcriptionModels: [
       { id: 'openai/whisper-1', label: 'Whisper 1 (default)', supportsTimestamps: true },
       { id: 'openai/whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo', supportsTimestamps: true },
@@ -94,15 +125,39 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
   },
   local: {
     label: 'Local/Custom',
+    hint: null,
     requiresApiKey: false,
     keyPlaceholder: '',
     keysUrl: '',
     transcriptionUrl: null,
     chatUrl: null,
     extraHeaders: {},
+    requestFormat: 'openaiMultipart',
     chunkSeconds: 600,
     requestTimeoutMs: 60_000,
+    maxParallelChunks: 5,
     transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: false }],
+    cleanupModels: [],
+  },
+  docker: {
+    label: 'Docker (local Whisper)',
+    hint:
+      'Runs Whisper on your CPU in a Docker container, audio never leaves your machine. Needs Docker running. ' +
+      'The first run builds the image and downloads the ~500 MB model.',
+    requiresApiKey: false,
+    keyPlaceholder: '',
+    keysUrl: '',
+    transcriptionUrl: `http://127.0.0.1:${DOCKER_WHISPER.hostPort}/transcribe`,
+    chatUrl: null,
+    extraHeaders: {},
+    requestFormat: 'rawBody',
+    // Short chunks: CPU transcription is slow, and progress only moves once per chunk
+    chunkSeconds: 120,
+    requestTimeoutMs: 600_000,
+    maxParallelChunks: 1,
+    transcriptionModels: [
+      { id: DOCKER_WHISPER.model, label: `Whisper ${DOCKER_WHISPER.model} (CPU)`, supportsTimestamps: true },
+    ],
     cleanupModels: [],
   },
 };
@@ -144,6 +199,7 @@ export interface TranscriberSettings {
   enableCleanup: boolean;
   cleanupModel: string;
   transcriptionModel: string;
+  dockerCpuThreads: number;
 }
 
 export const defaultSettings: TranscriberSettings = {
@@ -153,6 +209,7 @@ export const defaultSettings: TranscriberSettings = {
   enableCleanup: false,
   cleanupModel: defaultModel(PROVIDERS.openai.cleanupModels),
   transcriptionModel: defaultModel(PROVIDERS.openai.transcriptionModels),
+  dockerCpuThreads: defaultDockerCpuThreads(),
 };
 
 export interface HistoryEntry {

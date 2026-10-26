@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { StorageService } from './services/storageService';
 import { WhisperService } from './services/whisperService';
+import { DockerWhisperService } from './services/dockerWhisperService';
 import { CleanupService } from './services/cleanupService';
 import { AudioRecorderService } from './services/audioRecorderService';
 import { BrowserRecorderService } from './services/browserRecorderService';
@@ -12,7 +13,9 @@ import {
   TranscriptSegment,
   LANGUAGES,
   PROVIDERS,
+  defaultDockerCpuThreads,
 } from './types';
+import * as os from 'os';
 import { TRANSCRIPT_FORMATS, formatTranscript, TranscriptFormatId } from './services/transcriptFormats';
 
 export class VoiceTranscriberPanel {
@@ -69,7 +72,10 @@ export class VoiceTranscriberPanel {
     // Set tab icon (also needed for revive)
     this._panel.iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'icon.png');
     this._storage = new StorageService(context);
-    this._whisper = new WhisperService(this._storage);
+    this._whisper = new WhisperService(
+      this._storage,
+      new DockerWhisperService(vscode.Uri.joinPath(context.extensionUri, 'docker', 'whisper').fsPath)
+    );
     this._cleanup = new CleanupService(this._storage);
     this._audioRecorder = new AudioRecorderService();
     this._browserRecorder = new BrowserRecorderService(context.extensionUri);
@@ -462,6 +468,10 @@ export class VoiceTranscriberPanel {
     const providerOptions = Object.entries(PROVIDERS)
       .map(([id, config]) => `<option value="${id}">${config.label}</option>`)
       .join('\n            ');
+    const defaultThreads = defaultDockerCpuThreads();
+    const dockerThreadOptions = Array.from({ length: os.availableParallelism() }, (_, i) => i + 1)
+      .map((n) => `<option value="${n}">${n}${n === defaultThreads ? ' (default)' : ''}</option>`)
+      .join('\n              ');
     const languageOptions = LANGUAGES.map(
       (lang) => `<option value="${lang.code}">${lang.label}</option>`
     ).join('\n              ');
@@ -492,6 +502,7 @@ export class VoiceTranscriberPanel {
           <select id="provider">
             ${providerOptions}
           </select>
+          <small id="provider-hint" class="hint" style="display: none;"></small>
         </div>
 
         <div class="form-group" id="api-key-group">
@@ -528,6 +539,13 @@ export class VoiceTranscriberPanel {
           <div class="form-group" id="cleanup-model-group">
             <label for="cleanup-model">LLM Model</label>
             <select id="cleanup-model"></select>
+          </div>
+          <div class="form-group" id="docker-threads-group" style="display: none;">
+            <label for="docker-threads">CPU threads for Docker</label>
+            <select id="docker-threads">
+              ${dockerThreadOptions}
+            </select>
+            <small class="hint">More threads finish sooner but load your machine harder. The container stops after each transcription.</small>
           </div>
           <div class="form-group">
             <label for="language">Language</label>

@@ -1,0 +1,4 @@
+faster-whisper==1.1.1
+# faster-whisper 1.1.1 breaks on PyAV 14
+av==13.1.0
+requests==2.32.3

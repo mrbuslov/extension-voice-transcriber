@@ -5,21 +5,25 @@ import { StorageService } from './storageService';
 import {
   PROVIDERS,
   TranscriberSettings,
+  TranscriptionRequestFormat,
   TranscriptSegment,
   TranscriptionResult,
   findTranscriptionModel,
 } from '../types';
 import { isFfmpegAvailable, runFfmpeg } from './ffmpeg';
+import { DockerWhisperService } from './dockerWhisperService';
 
 const MAX_FILE_SIZE = 24 * 1024 * 1024; // 24MB (leaving margin for 25MB limit)
 const FAST_PATH_THRESHOLD = 5 * 1024 * 1024; // ≤5MB → single API call (fast path, no ffmpeg needed)
 const CHUNK_BITRATE = '128k';
-const MAX_PARALLEL_CHUNKS = 5; // Higher values trigger OpenAI rate limits (429), wasting time on retries
 const MAX_RETRIES = 5;
 const BASE_RETRY_DELAY_MS = 1000;
 
 export class WhisperService {
-  constructor(private readonly storage: StorageService) {}
+  constructor(
+    private readonly storage: StorageService,
+    private readonly dockerWhisper: DockerWhisperService
+  ) {}
 
   async transcribe(
     audioBuffer: Buffer,
@@ -37,7 +41,23 @@ export class WhisperService {
       throw new Error(`Please enter your ${config.label} API key in Settings.`);
     }
     findTranscriptionModel(settings.provider, settings.transcriptionModel);
+    if (settings.provider === 'docker') {
+      return this.dockerWhisper.withRunningContainer(
+        settings.dockerCpuThreads,
+        (message) => onProgress?.(message),
+        () => this.route(audioBuffer, mimeType, settings, apiKey, onProgress)
+      );
+    }
+    return this.route(audioBuffer, mimeType, settings, apiKey, onProgress);
+  }
 
+  private async route(
+    audioBuffer: Buffer,
+    mimeType: string,
+    settings: TranscriberSettings,
+    apiKey: string | undefined,
+    onProgress?: (message: string, progress?: number) => void
+  ): Promise<TranscriptionResult> {
     // Fast path: tiny file in a format Whisper accepts directly. Larger files always go
     // through ffmpeg so they get chunked + transcribed in parallel with progress feedback.
     if (audioBuffer.length <= FAST_PATH_THRESHOLD && isWhisperCompatible(mimeType)) {
@@ -62,9 +82,8 @@ export class WhisperService {
     apiKey: string | undefined,
     label: string = 'audio'
   ): Promise<TranscriptionResult> {
-    const extension = getExtension(mimeType);
     const config = PROVIDERS[settings.provider];
-    const url = resolveTranscriptionUrl(settings);
+    const baseUrl = resolveTranscriptionUrl(settings);
     const requestTimeoutMs = config.requestTimeoutMs;
     const wantsTimestamps = findTranscriptionModel(
       settings.provider,
@@ -76,21 +95,11 @@ export class WhisperService {
       headers['Authorization'] = `Bearer ${apiKey}`;
     }
 
-    console.log(`[WhisperService:${label}] Sending ${audioBuffer.length} bytes to ${url}`);
+    console.log(`[WhisperService:${label}] Sending ${audioBuffer.length} bytes to ${baseUrl}`);
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      // Build fresh FormData per attempt - Blob + FormData aren't reliably reusable
-      const blob = new Blob([audioBuffer], { type: mimeType });
-      const formData = new FormData();
-      formData.append('file', blob, `audio.${extension}`);
-      formData.append('model', settings.transcriptionModel);
-      if (wantsTimestamps) {
-        // verbose_json already returns segments; no timestamp_granularities needed
-        formData.append('response_format', 'verbose_json');
-      }
-      if (settings.language) {
-        formData.append('language', settings.language);
-      }
+      // Built per attempt: Blob + FormData aren't reliably reusable
+      const { url, body } = buildRequest(config.requestFormat, baseUrl, audioBuffer, mimeType, settings, wantsTimestamps);
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), requestTimeoutMs);
@@ -101,7 +110,7 @@ export class WhisperService {
         response = await fetch(url, {
           method: 'POST',
           headers,
-          body: formData,
+          body,
           signal: controller.signal,
         });
       } catch (fetchError) {
@@ -178,8 +187,7 @@ export class WhisperService {
           '-ac', '1',
           '-y',
           transcodedPath,
-        ],
-        { captureStderr: true }
+        ]
       );
 
       // Stage 2: always split into time-based chunks. Even if the whole transcoded file
@@ -200,8 +208,7 @@ export class WhisperService {
           '-c', 'copy',
           '-y',
           chunkPattern,
-        ],
-        { captureStderr: true }
+        ]
       );
 
       const chunkFiles = fs
@@ -213,16 +220,16 @@ export class WhisperService {
         throw new Error('ffmpeg produced no chunks');
       }
 
-      // Stage 3: transcribe chunks in parallel (bounded concurrency)
+      // Stage 3: transcribe chunks, as many at once as the provider allows
       const total = chunkFiles.length;
       let completed = 0;
-      if (onProgress) onProgress(`Transcribing ${total} chunks in parallel...`, 0);
+      if (onProgress) onProgress(`Transcribing ${total} chunks...`, 0);
 
       const chunkStarts = parseChunkStarts(fs.readFileSync(chunkListPath, 'utf8'));
 
       const results = await this.mapWithConcurrency(
         chunkFiles,
-        MAX_PARALLEL_CHUNKS,
+        PROVIDERS[settings.provider].maxParallelChunks,
         async (name, idx) => {
           const chunkBuffer = fs.readFileSync(path.join(workDir, name));
           const result = await this.transcribeSingle(
@@ -328,6 +335,36 @@ function parseChunkStarts(csv: string): Map<string, number> {
     starts.set(name, parsed);
   }
   return starts;
+}
+
+function buildRequest(
+  format: TranscriptionRequestFormat,
+  baseUrl: string,
+  audioBuffer: Buffer,
+  mimeType: string,
+  settings: TranscriberSettings,
+  wantsTimestamps: boolean
+): { url: string; body: FormData | Blob } {
+  if (format === 'rawBody') {
+    // The server always returns segments and probes the format itself, so only the language travels
+    const url = new URL(baseUrl);
+    if (settings.language) {
+      url.searchParams.set('language', settings.language);
+    }
+    return { url: url.toString(), body: new Blob([audioBuffer]) };
+  }
+
+  const formData = new FormData();
+  formData.append('file', new Blob([audioBuffer], { type: mimeType }), `audio.${getExtension(mimeType)}`);
+  formData.append('model', settings.transcriptionModel);
+  if (wantsTimestamps) {
+    // verbose_json already returns segments; no timestamp_granularities needed
+    formData.append('response_format', 'verbose_json');
+  }
+  if (settings.language) {
+    formData.append('language', settings.language);
+  }
+  return { url: baseUrl, body: formData };
 }
 
 function resolveTranscriptionUrl(settings: TranscriberSettings): string {

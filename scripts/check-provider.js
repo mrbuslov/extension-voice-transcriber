@@ -6,6 +6,7 @@
  * Usage:
  *   OPENROUTER_API_KEY=sk-or-... node scripts/check-provider.js openrouter [audio-file] [stt-model]
  *   OPENAI_API_KEY=sk-...        node scripts/check-provider.js openai     [audio-file] [stt-model]
+ *                                node scripts/check-provider.js docker     [audio-file]
  *
  * Without an audio file, a short spoken sample is generated (macOS `say` + ffmpeg).
  */
@@ -16,6 +17,7 @@ const { execFileSync } = require('child_process');
 
 const { PROVIDERS, defaultSettings, defaultModel } = require('../out/types');
 const { WhisperService } = require('../out/services/whisperService');
+const { DockerWhisperService } = require('../out/services/dockerWhisperService');
 const { CleanupService } = require('../out/services/cleanupService');
 const { formatTranscript } = require('../out/services/transcriptFormats');
 
@@ -36,7 +38,7 @@ function buildSampleAudio() {
 
 function mimeFor(file) {
   const ext = path.extname(file).slice(1).toLowerCase();
-  const byExt = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/m4a', ogg: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm' };
+  const byExt = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/m4a', ogg: 'audio/ogg', flac: 'audio/flac', webm: 'audio/webm', mp4: 'video/mp4', mov: 'video/quicktime' };
   if (!byExt[ext]) {
     throw new Error(`Unsupported sample extension: .${ext}`);
   }
@@ -59,19 +61,21 @@ async function main() {
   const audioBuffer = fs.readFileSync(audioFile);
   const storage = { getApiKey: async () => apiKey };
 
+  const supportsCleanup = PROVIDERS[provider].cleanupModels.length > 0;
   const settings = {
     ...defaultSettings,
     provider,
-    enableCleanup: true,
+    enableCleanup: supportsCleanup,
     transcriptionModel: process.argv[4] || defaultModel(PROVIDERS[provider].transcriptionModels),
-    cleanupModel: defaultModel(PROVIDERS[provider].cleanupModels),
+    cleanupModel: supportsCleanup ? defaultModel(PROVIDERS[provider].cleanupModels) : '',
   };
 
   console.log(`provider=${provider} stt=${settings.transcriptionModel} llm=${settings.cleanupModel}`);
   console.log(`audio=${audioFile} (${audioBuffer.length} bytes)\n`);
 
   const started = Date.now();
-  const raw = await new WhisperService(storage).transcribe(audioBuffer, mimeFor(audioFile), settings, (m, p) =>
+  const docker = new DockerWhisperService(path.join(__dirname, '..', 'docker', 'whisper'));
+  const raw = await new WhisperService(storage, docker).transcribe(audioBuffer, mimeFor(audioFile), settings, (m, p) =>
     console.log(`  [progress] ${m}${typeof p === 'number' ? ` ${(p * 100).toFixed(0)}%` : ''}`)
   );
   console.log(`\nTRANSCRIPT (${Date.now() - started}ms): ${raw.text.length} chars, ${raw.segments.length} segments`);
@@ -90,6 +94,10 @@ async function main() {
     console.log('SEGMENTS: none (model does not support timestamps)\n');
   }
 
+  if (!supportsCleanup) {
+    console.log('CLEANUP: not available for this provider');
+    return;
+  }
   const cleanStarted = Date.now();
   const cleaned = await new CleanupService(storage).cleanupText(raw.text, settings);
   console.log(`CLEANED (${Date.now() - cleanStarted}ms):\n${cleaned.slice(0, 200)}`);

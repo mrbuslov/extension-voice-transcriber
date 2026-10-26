@@ -11,6 +11,7 @@
 
   const elements = {
     provider: document.getElementById('provider'),
+    providerHint: document.getElementById('provider-hint'),
     apiKey: document.getElementById('api-key'),
     toggleApiKey: document.getElementById('toggle-api-key'),
     saveApiKey: document.getElementById('save-api-key'),
@@ -28,6 +29,8 @@
     transcriptionModel: document.getElementById('transcription-model'),
     transcriptionModelGroup: document.getElementById('transcription-model-group'),
     language: document.getElementById('language'),
+    dockerThreads: document.getElementById('docker-threads'),
+    dockerThreadsGroup: document.getElementById('docker-threads-group'),
     recordingStatus: document.getElementById('recording-status'),
     timer: document.getElementById('timer'),
     startBtn: document.getElementById('start-btn'),
@@ -85,6 +88,7 @@
     elements.cleanupModel.addEventListener('change', saveSettings);
     elements.transcriptionModel.addEventListener('change', saveSettings);
     elements.language.addEventListener('change', saveSettings);
+    elements.dockerThreads.addEventListener('change', saveSettings);
 
     elements.startBtn.addEventListener('click', startRecording);
     elements.pauseBtn.addEventListener('click', pauseRecording);
@@ -161,6 +165,8 @@
     const provider = elements.provider.value;
     const config = PROVIDERS[provider];
 
+    elements.providerHint.textContent = config.hint || '';
+    elements.providerHint.style.display = config.hint ? 'block' : 'none';
     elements.apiKeyGroup.style.display = config.requiresApiKey ? 'block' : 'none';
     elements.apiKeyLabel.textContent = `${config.label} API Key`;
     elements.apiKey.placeholder = `Enter your ${config.label} API key`;
@@ -168,6 +174,7 @@
     elements.apiKeyLink.href = config.keysUrl;
     elements.apiKeyLink.textContent = `Get a ${config.label} API key ↗`;
     elements.localUrlGroup.style.display = config.transcriptionUrl ? 'none' : 'block';
+    elements.dockerThreadsGroup.style.display = provider === 'docker' ? 'block' : 'none';
 
     const supportsCleanup = config.cleanupModels.length > 0;
     elements.cleanupGroup.style.display = supportsCleanup ? 'block' : 'none';
@@ -236,6 +243,7 @@
         cleanupModel: elements.cleanupModel.value,
         transcriptionModel: elements.transcriptionModel.value,
         language: elements.language.value,
+        dockerCpuThreads: Number(elements.dockerThreads.value),
       },
     });
   }
@@ -649,6 +657,7 @@
         elements.localUrl.value = message.data.localApiUrl || '';
         elements.enableCleanup.checked = message.data.enableCleanup;
         elements.language.value = message.data.language || '';
+        elements.dockerThreads.value = String(message.data.dockerCpuThreads);
         const modelWasReset = applyProviderUI(message.data);
         if (modelWasReset) {
           saveSettings();
