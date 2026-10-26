@@ -171,6 +171,8 @@ npm run compile && OPENROUTER_API_KEY=sk-or-v1-... node scripts/check-provider.j
 
 Swap in `OPENAI_API_KEY=sk-... node scripts/check-provider.js openai` for OpenAI, or `node scripts/check-provider.js docker` for the Docker provider (needs Docker running). Pass an audio file path as a second argument to skip the generated sample (sample generation needs macOS `say` plus ffmpeg).
 
+To check the webview itself (file picker, upload, progress, error toasts) in a real Extension Development Host, use `node scripts/e2e-upload.js <provider|-> <file> [waitSeconds]`. It launches a throwaway VS Code profile, uploads the file through the panel and exits 0 once a transcript appears. Pass `-` to keep the default provider.
+
 ## Publishing to VS Code Marketplace
 
 ### Prerequisites
