@@ -111,10 +111,6 @@ export class VoiceTranscriberPanel {
         break;
       }
 
-      case 'transcribe':
-        await this._handleTranscription(message.audioData, message.mimeType);
-        break;
-
       case 'saveSession':
         await this._storage.saveRecordingSession(message.session);
         break;
@@ -157,7 +153,10 @@ export class VoiceTranscriberPanel {
         break;
 
       case 'uploadAudio':
-        await this._handleTranscription(message.audioData, message.mimeType);
+        await this._handleTranscription(
+          Buffer.from(message.audio.buffer, message.audio.byteOffset, message.audio.byteLength),
+          message.mimeType
+        );
         break;
 
       case 'addToHistory':
@@ -292,7 +291,6 @@ export class VoiceTranscriberPanel {
 
       this._lastAudioBuffer = buffer;
       this._lastAudioMimeType = mimeType;
-      const audioData = buffer.toString('base64');
 
       // Log WAV duration for diagnostics (16kHz, 16-bit mono = 32000 bytes/sec, minus 44-byte header)
       const wavHeaderSize = 44;
@@ -303,7 +301,7 @@ export class VoiceTranscriberPanel {
       // Notify webview that recording stopped (no audio data — kept in extension)
       this._postMessage({ type: 'recordingStopped' });
 
-      await this._handleTranscription(audioData, mimeType);
+      await this._handleTranscription(buffer, mimeType);
     } catch (error) {
       this._lastAudioBuffer = null;
       this._lastAudioMimeType = null;
@@ -326,9 +324,7 @@ export class VoiceTranscriberPanel {
 
       const { buffer, mimeType } = await this._browserRecorder.record();
 
-      // Proceed to transcription
-      const audioData = buffer.toString('base64');
-      await this._handleTranscription(audioData, mimeType);
+      await this._handleTranscription(buffer, mimeType);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Browser recording failed';
       if (message !== 'Recording cancelled' && message !== 'Recording cancelled by user') {
@@ -344,12 +340,11 @@ export class VoiceTranscriberPanel {
     }
   }
 
-  private async _handleTranscription(audioData: string, mimeType: string) {
+  private async _handleTranscription(audioBuffer: Buffer, mimeType: string) {
     try {
       this._postMessage({ type: 'transcriptionStart' });
 
       const settings = this._storage.getSettings();
-      const audioBuffer = Buffer.from(audioData, 'base64');
 
       this._postMessage({ type: 'transcriptionProgress', message: 'Transcribing audio...' });
 

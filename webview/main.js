@@ -315,7 +315,7 @@
     return ACCEPTED_EXTENSIONS.includes(ext);
   }
 
-  function processAudioFile(file) {
+  async function processAudioFile(file) {
     if (!isAcceptedFile(file)) {
       vscode.postMessage({
         type: 'showError',
@@ -323,19 +323,33 @@
       });
       return;
     }
+    if (file.size === 0) {
+      vscode.postMessage({ type: 'showError', message: `${file.name} is empty (0 bytes).` });
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = function (e) {
-      const base64 = e.target.result.split(',')[1]; // Remove data:audio/...;base64, prefix
+    // Raw bytes, not a data URL: base64 of a file over ~380 MB exceeds Chromium's max string
+    // length and readAsDataURL silently returns ""
+    showProgress(`Reading ${file.name}...`);
+    let audio;
+    try {
+      audio = new Uint8Array(await file.arrayBuffer());
+    } catch (error) {
+      hideProgress();
+      vscode.postMessage({ type: 'showError', message: `Could not read ${file.name}: ${error.message}` });
+      return;
+    }
+    if (audio.byteLength !== file.size) {
+      hideProgress();
       vscode.postMessage({
-        type: 'uploadAudio',
-        audioData: base64,
-        mimeType: file.type || 'audio/mpeg',
-        filename: file.name,
+        type: 'showError',
+        message: `Could not read ${file.name}: got ${audio.byteLength} of ${file.size} bytes.`,
       });
-      showProgress(`Transcribing ${file.name}...`);
-    };
-    reader.readAsDataURL(file);
+      return;
+    }
+
+    vscode.postMessage({ type: 'uploadAudio', audio, mimeType: file.type, filename: file.name });
+    showProgress(`Transcribing ${file.name}...`);
   }
 
   function setupDragAndDrop() {

@@ -27,6 +27,9 @@ export class WhisperService {
     settings: TranscriberSettings,
     onProgress?: (message: string, progress?: number) => void
   ): Promise<TranscriptionResult> {
+    if (audioBuffer.length === 0) {
+      throw new Error('Received 0 bytes of audio, nothing to transcribe.');
+    }
     const config = PROVIDERS[settings.provider];
     const apiKey = await this.storage.getApiKey(settings.provider);
 
@@ -49,7 +52,7 @@ export class WhisperService {
       return this.transcribeSingle(audioBuffer, mimeType, settings, apiKey, 'single');
     }
 
-    return this.transcribeViaFfmpeg(audioBuffer, mimeType, settings, apiKey, onProgress);
+    return this.transcribeViaFfmpeg(audioBuffer, settings, apiKey, onProgress);
   }
 
   private async transcribeSingle(
@@ -148,14 +151,13 @@ export class WhisperService {
 
   private async transcribeViaFfmpeg(
     audioBuffer: Buffer,
-    mimeType: string,
     settings: TranscriberSettings,
     apiKey: string | undefined,
     onProgress?: (message: string, progress?: number) => void
   ): Promise<TranscriptionResult> {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'voice-transcriber-chunks-'));
-    const inputExt = getExtension(mimeType) || 'bin';
-    const inputPath = path.join(workDir, `input.${inputExt}`);
+    // No extension: ffmpeg probes the container, so an empty or vague mimeType still works
+    const inputPath = path.join(workDir, 'input');
     const transcodedPath = path.join(workDir, 'audio.mp3');
 
     try {
@@ -349,7 +351,7 @@ function getExtension(mimeType: string): string {
   if (mimeType.includes('mkv') || mimeType.includes('matroska')) return 'mkv';
   if (mimeType.includes('quicktime') || mimeType.includes('mov')) return 'mov';
   if (mimeType.includes('avi')) return 'avi';
-  throw new Error(`Unsupported audio format: ${mimeType}`);
+  throw new Error(`Unsupported audio format: "${mimeType}". Install ffmpeg to convert it.`);
 }
 
 function sleep(ms: number): Promise<void> {

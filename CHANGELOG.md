@@ -2,6 +2,13 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.2.1] - 2026-10-26
+
+### Fixed
+- Uploading a large video (a ~480 MB `.mov` screen recording, for example) no longer fails with "The first argument must be of type string or an instance of Buffer... Received undefined". The panel used to turn the file into a base64 data URL, and past roughly 380 MB that string exceeds the browser's maximum string length, so it silently came back empty. Files are now handed to the extension as raw bytes, which also skips a 33% base64 overhead and a decode step for every upload
+- A file that can't be read, or reads short, now shows a clear error naming the file instead of a cryptic one later
+- Files whose type the browser doesn't recognise are no longer mislabelled as MP3; ffmpeg detects the real format from the content
+
 ## [1.2.0] - 2026-09-08
 
 ### Added

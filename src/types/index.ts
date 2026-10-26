@@ -207,13 +207,13 @@ export type MessageFromWebview =
   | { type: 'stopRecording' }
   | { type: 'cancelRecording' }
   | { type: 'startBrowserRecording' }
-  | { type: 'transcribe'; audioData: string; mimeType: string }
   | { type: 'saveSession'; session: RecordingSession | null }
   | { type: 'copyToClipboard'; text: string }
   | { type: 'copyWithTimestamps' }
   | { type: 'insertToEditor'; text: string }
   | { type: 'saveAudio'; audioData: string; mimeType: string }
-  | { type: 'uploadAudio'; audioData: string; mimeType: string; filename: string }
+  /** mimeType is "" when the browser can't map the extension; ffmpeg then probes the content */
+  | { type: 'uploadAudio'; audio: Uint8Array; mimeType: string; filename: string }
   | { type: 'addToHistory'; entry: Omit<HistoryEntry, 'id'> }
   | { type: 'clearHistory' }
   | { type: 'showError'; message: string }
