@@ -59,7 +59,8 @@ export class DockerWhisperService {
 
   private stopInBackground(): void {
     this.stopping = Promise.resolve()
-      .then(() => this.dockerCli().run(['stop', DOCKER_WHISPER.containerName]))
+      // Detached so the stop still lands if VS Code quits right after the transcript arrives
+      .then(() => this.dockerCli().run(['stop', DOCKER_WHISPER.containerName], { detached: true }))
       .then(() => undefined)
       // Optional cleanup after the transcript is already delivered; a failed stop only leaves the container idle
       .catch((error) => console.error(`[DockerWhisper] Failed to stop container: ${(error as Error).message}`))
@@ -218,8 +219,8 @@ class DockerCli {
     this.env = { ...process.env, PATH: [binDir, process.env.PATH].filter(Boolean).join(path.delimiter) };
   }
 
-  async run(args: string[], options: { stderrToo?: boolean } = {}): Promise<string> {
-    const { stdout, stderr } = await runProcess(this.executable, args, { env: this.env });
+  async run(args: string[], options: { stderrToo?: boolean; detached?: boolean } = {}): Promise<string> {
+    const { stdout, stderr } = await runProcess(this.executable, args, { env: this.env, detached: options.detached });
     return options.stderrToo ? stdout + stderr : stdout;
   }
 }

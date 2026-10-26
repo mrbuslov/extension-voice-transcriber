@@ -2,6 +2,11 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+- The Docker container is now stopped even when VS Code quits right after a transcription finishes; before, it could keep running in the background until Docker restarted
+
 ## [1.3.0] - 2026-10-26
 
 ### Added

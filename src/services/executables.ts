@@ -52,10 +52,14 @@ export interface ProcessOutput {
 export function runProcess(
   executable: string,
   args: string[],
-  options: { env?: NodeJS.ProcessEnv } = {}
+  options: { env?: NodeJS.ProcessEnv; detached?: boolean } = {}
 ): Promise<ProcessOutput> {
   return new Promise((resolve, reject) => {
-    const proc = spawn(executable, args, { stdio: ['ignore', 'pipe', 'pipe'], env: options.env });
+    const proc = spawn(executable, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: options.env,
+      detached: options.detached,
+    });
 
     let stdout = '';
     let stderr = '';
