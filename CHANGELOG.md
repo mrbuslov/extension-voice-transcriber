@@ -2,6 +2,17 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.4.1] - 2026-10-27
+
+### Fixed
+- The Docker provider no longer says it is downloading the model on every start. The model was always loaded from the local cache, only the message was wrong. The server now reports what it is really doing: "Downloading Whisper large-v3-turbo (1.6 GB, first time only)" when the model is missing, and "Loading Whisper large-v3-turbo into memory" when it is cached
+- A cached model now loads fully offline, without asking Hugging Face for a newer revision first, so the Docker provider works without internet once the model is downloaded
+- If the model fails to load (a bad cache, no disk space), the error shows up right away instead of after a 15-minute wait
+
+### Notes
+- Loading Large v3 Turbo into memory takes ~15-35 seconds on each start, because the container stops after every transcription and Docker Desktop reads the 1.6 GB file from its volume at ~100 MB/s
+- The full `large-v3` model was tested as a higher-quality option and left out: on a 90-second Russian/English voice note it took 28 minutes, peaked at 5.7 GB of RAM, and fell into a repetition loop that Turbo did not
+
 ## [1.4.0] - 2026-10-27
 
 ### Added
