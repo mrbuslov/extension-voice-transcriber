@@ -16,6 +16,7 @@ import {
   defaultDockerCpuThreads,
 } from './types';
 import * as os from 'os';
+import { ICONS } from './webviewIcons';
 import { TRANSCRIPT_FORMATS, formatTranscript, TranscriptFormatId } from './services/transcriptFormats';
 
 export class VoiceTranscriberPanel {
@@ -489,112 +490,18 @@ export class VoiceTranscriberPanel {
 </head>
 <body>
   <div id="app">
-    <!-- Settings Section -->
-    <section class="collapsible" id="settings-section">
-      <header class="section-header" data-toggle="settings-content">
-        <span class="section-icon">&#9881;</span>
-        <span>Settings</span>
-        <span class="toggle-icon">&#9660;</span>
-      </header>
-      <div class="section-content" id="settings-content">
-        <div class="form-group">
-          <label for="provider">Provider</label>
-          <select id="provider">
-            ${providerOptions}
-          </select>
-          <small id="provider-hint" class="hint" style="display: none;"></small>
-        </div>
-
-        <div class="form-group" id="api-key-group">
-          <label for="api-key"><span id="api-key-label">API Key</span></label>
-          <div class="api-key-row">
-            <input type="password" id="api-key" placeholder="Enter your API key">
-            <button id="toggle-api-key" class="icon-button" title="Show/Hide">&#128065;</button>
-            <button id="save-api-key" class="icon-button" title="Save">&#128190;</button>
-            <button id="clear-api-key" class="icon-button" title="Remove saved key">&#128465;</button>
-          </div>
-          <span id="api-key-status" class="status-text"></span>
-          <a id="api-key-link" class="hint hint-link" href="#" target="_blank" rel="noreferrer">Get an API key &#8599;</a>
-        </div>
-
-        <div class="form-group" id="local-url-group" style="display: none;">
-          <label for="local-url">Whisper API URL</label>
-          <input type="text" id="local-url" placeholder="http://localhost:8000/v1/audio/transcriptions">
-          <small class="hint">Must be Whisper-compatible API</small>
-        </div>
-
-        <div class="form-group" id="cleanup-group">
-          <label class="checkbox-label">
-            <input type="checkbox" id="enable-cleanup">
-            Clean up text with LLM
-          </label>
-        </div>
-
-        <details class="advanced-settings">
-          <summary>Advanced Settings</summary>
-          <div class="form-group" id="transcription-model-group">
-            <label for="transcription-model">Transcription Model</label>
-            <select id="transcription-model"></select>
-          </div>
-          <div class="form-group" id="cleanup-model-group">
-            <label for="cleanup-model">LLM Model</label>
-            <select id="cleanup-model"></select>
-          </div>
-          <div class="form-group" id="docker-threads-group" style="display: none;">
-            <label for="docker-threads">CPU threads for Docker</label>
-            <select id="docker-threads">
-              ${dockerThreadOptions}
-            </select>
-            <small class="hint">More threads finish sooner but load your machine harder. The container stops after each transcription.</small>
-          </div>
-          <div class="form-group">
-            <label for="language">Language</label>
-            <select id="language">
-              ${languageOptions}
-            </select>
-          </div>
-        </details>
-      </div>
-    </section>
-
-    <!-- Recording Section -->
     <section id="recording-section">
       <div id="recording-header">
-        <div id="recording-status">Ready to Record</div>
-        <button id="download-audio-btn" class="icon-button" style="display: none;" title="Download Audio">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-          </svg>
-        </button>
+        <div id="recording-status">Ready</div>
+        <button id="download-audio-btn" class="icon-button" style="display: none;" title="Download audio">${ICONS.download}</button>
       </div>
       <div id="timer">00:00:00</div>
       <div id="recording-controls">
-        <button id="start-btn" class="record-btn primary" title="Start Recording">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-            <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-          </svg>
-        </button>
-        <button id="pause-btn" class="record-btn" style="display: none;" title="Pause">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-          </svg>
-        </button>
-        <button id="resume-btn" class="record-btn" style="display: none;" title="Resume">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M8 5v14l11-7z"/>
-          </svg>
-        </button>
-        <button id="stop-btn" class="record-btn danger" style="display: none;" title="Stop">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M6 6h12v12H6z"/>
-          </svg>
-        </button>
-        <button id="save-audio-btn" class="record-btn" style="display: none;" title="Save Audio">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/>
-          </svg>
-        </button>
+        <button id="start-btn" class="record-btn primary" title="Start recording">${ICONS.mic}</button>
+        <button id="pause-btn" class="record-btn" style="display: none;" title="Pause">${ICONS.pause}</button>
+        <button id="resume-btn" class="record-btn" style="display: none;" title="Resume">${ICONS.play}</button>
+        <button id="stop-btn" class="record-btn danger" style="display: none;" title="Stop">${ICONS.stop}</button>
+        <button id="save-audio-btn" class="record-btn" style="display: none;" title="Save audio">${ICONS.save}</button>
       </div>
       <div id="progress-container" style="display: none;">
         <div class="progress-header">
@@ -606,78 +513,113 @@ export class VoiceTranscriberPanel {
         </div>
       </div>
       <div id="permission-error" class="permission-error" style="display: none;">
-        <div class="permission-error-icon">&#9888;</div>
         <div class="permission-error-title">Microphone Access Denied</div>
         <div id="permission-error-instructions" class="permission-error-instructions"></div>
         <button id="permission-error-dismiss" class="text-button">Dismiss</button>
       </div>
     </section>
 
-    <!-- Transcription Section -->
+    <div class="upload-area" id="upload-area">
+      <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.mp4,.webm,.ogg,.oga,.flac,.mkv,.mov,.avi,audio/*,video/*" style="display: none;">
+      <label for="audio-file-input" class="upload-label" title="MP3, WAV, M4A, WebM, OGG, FLAC, MP4, MKV, MOV, AVI">
+        ${ICONS.upload}
+        <span>Drop an audio or video file, or <span class="upload-browse">browse</span></span>
+      </label>
+    </div>
+
     <section id="transcription-section" style="display: none;">
-      <header class="section-header">
-        <span class="section-icon">&#128221;</span>
-        <span>Transcription</span>
+      <header class="transcript-header">
+        <span class="section-title">Transcript</span>
         <div class="section-header-actions">
-          <button id="edit-toggle-btn" class="icon-button active" title="Edit transcription">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-            </svg>
-          </button>
-          <button id="insert-btn" class="icon-button" title="Insert text into active file">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
-            </svg>
-          </button>
-          <button id="copy-timestamps-btn" class="icon-button labeled-button" style="display: none;" title="Copy with timestamps — SRT, WebVTT, or plain text">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm.01 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
-            </svg>
-            <span>SRT</span>
-          </button>
-          <button id="copy-btn" class="icon-button" title="Copy text to clipboard">&#128203;</button>
+          <button id="edit-toggle-btn" class="icon-button active" title="Edit transcript">${ICONS.edit}</button>
+          <button id="insert-btn" class="icon-button" title="Insert into the active file">${ICONS.insert}</button>
+          <button id="copy-timestamps-btn" class="icon-button labeled-button" style="display: none;" title="Copy with timestamps: SRT, WebVTT, or plain text">${ICONS.clock}<span>SRT</span></button>
+          <button id="copy-btn" class="icon-button" title="Copy text">${ICONS.copy}</button>
         </div>
       </header>
-      <div id="transcription-content">
-        <textarea id="transcription-text" placeholder="Transcription will appear here..."></textarea>
-      </div>
+      <textarea id="transcription-text" placeholder="Transcript will appear here..."></textarea>
     </section>
 
-    <!-- Upload Audio Section -->
-    <section class="collapsible" id="upload-section">
-      <header class="section-header" data-toggle="upload-content">
-        <span class="section-icon">&#128228;</span>
-        <span>Upload Audio</span>
-        <span class="toggle-icon">&#9660;</span>
+    <section class="collapsible" id="settings-section">
+      <header class="section-header" data-toggle="settings-content">
+        <span class="toggle-icon">${ICONS.chevron}</span>
+        <span class="section-title">Settings</span>
+        <span id="settings-summary" class="section-summary"></span>
       </header>
-      <div class="section-content collapsed" id="upload-content">
-        <div class="upload-area" id="upload-area">
-          <input type="file" id="audio-file-input" accept=".mp3,.wav,.m4a,.mp4,.webm,.ogg,.oga,.flac,.mkv,.mov,.avi,audio/*,video/*" style="display: none;">
-          <label for="audio-file-input" class="upload-label">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/>
-            </svg>
-            <span>Click or drop audio file here</span>
-            <span class="upload-formats">Audio: MP3, WAV, M4A, WebM, OGG, FLAC &nbsp;&middot;&nbsp; Video: MP4, MKV, MOV, AVI</span>
+      <div class="section-content" id="settings-content">
+        <div class="form-group">
+          <label for="provider">Provider</label>
+          <select id="provider">
+            ${providerOptions}
+          </select>
+          <small id="provider-hint" class="hint" style="display: none;"></small>
+        </div>
+
+        <div class="form-group" id="transcription-model-group">
+          <label for="transcription-model">Model</label>
+          <select id="transcription-model"></select>
+          <small id="transcription-model-hint" class="hint" style="display: none;"></small>
+        </div>
+
+        <div class="form-group" id="api-key-group">
+          <label for="api-key"><span id="api-key-label">API Key</span></label>
+          <div class="api-key-row">
+            <input type="password" id="api-key" placeholder="Enter your API key">
+            <button id="toggle-api-key" class="icon-button" title="Show or hide">${ICONS.eye}</button>
+            <button id="save-api-key" class="icon-button" title="Save key">${ICONS.check}</button>
+            <button id="clear-api-key" class="icon-button" title="Remove saved key">${ICONS.trash}</button>
+          </div>
+          <span id="api-key-status" class="status-text"></span>
+          <a id="api-key-link" class="hint hint-link" href="#" target="_blank" rel="noreferrer">Get an API key</a>
+        </div>
+
+        <div class="form-group" id="local-url-group" style="display: none;">
+          <label for="local-url">Whisper API URL</label>
+          <input type="text" id="local-url" placeholder="http://localhost:8000/v1/audio/transcriptions">
+          <small class="hint">Must be a Whisper-compatible API</small>
+        </div>
+
+        <div class="form-group" id="cleanup-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="enable-cleanup">
+            Clean up text with an LLM
           </label>
         </div>
+
+        <details class="advanced-settings">
+          <summary>Advanced</summary>
+          <div class="form-group">
+            <label for="language">Language</label>
+            <select id="language">
+              ${languageOptions}
+            </select>
+          </div>
+          <div class="form-group" id="cleanup-model-group">
+            <label for="cleanup-model">LLM model</label>
+            <select id="cleanup-model"></select>
+          </div>
+          <div class="form-group" id="docker-threads-group" style="display: none;">
+            <label for="docker-threads">CPU threads for Docker</label>
+            <select id="docker-threads">
+              ${dockerThreadOptions}
+            </select>
+            <small class="hint">More threads finish sooner but load your machine harder. The container stops after each transcription.</small>
+          </div>
+        </details>
       </div>
     </section>
 
-    <!-- History Section -->
     <section class="collapsible" id="history-section">
       <header class="section-header" data-toggle="history-content">
-        <span class="section-icon">&#128218;</span>
-        <span>History</span>
-        <span class="toggle-icon">&#9660;</span>
+        <span class="toggle-icon">${ICONS.chevron}</span>
+        <span class="section-title">History</span>
       </header>
       <div class="section-content collapsed" id="history-content">
         <div id="history-list"></div>
-        <button id="clear-history-btn" class="text-button" style="display: none;">Clear History</button>
+        <button id="clear-history-btn" class="text-button" style="display: none;">Clear history</button>
       </div>
     </section>
 
-    <!-- Session Recovery Modal -->
     <div id="recovery-modal" class="modal" style="display: none;">
       <div class="modal-content">
         <h3>Recording Recovery</h3>
@@ -690,6 +632,8 @@ export class VoiceTranscriberPanel {
       </div>
     </div>
   </div>
+
+  <template id="copy-icon">${ICONS.copy}</template>
 
   <script nonce="${nonce}">window.__PROVIDERS__ = ${providersJson};</script>
   <script nonce="${nonce}" src="${lamejsUri}"></script>

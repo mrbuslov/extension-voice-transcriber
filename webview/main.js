@@ -28,6 +28,9 @@
     cleanupModelGroup: document.getElementById('cleanup-model-group'),
     transcriptionModel: document.getElementById('transcription-model'),
     transcriptionModelGroup: document.getElementById('transcription-model-group'),
+    transcriptionModelHint: document.getElementById('transcription-model-hint'),
+    settingsSummary: document.getElementById('settings-summary'),
+    copyIcon: document.getElementById('copy-icon'),
     language: document.getElementById('language'),
     dockerThreads: document.getElementById('docker-threads'),
     dockerThreadsGroup: document.getElementById('docker-threads-group'),
@@ -86,7 +89,10 @@
     elements.localUrl.addEventListener('change', saveSettings);
     elements.enableCleanup.addEventListener('change', handleCleanupChange);
     elements.cleanupModel.addEventListener('change', saveSettings);
-    elements.transcriptionModel.addEventListener('change', saveSettings);
+    elements.transcriptionModel.addEventListener('change', () => {
+      renderModelDetails();
+      saveSettings();
+    });
     elements.language.addEventListener('change', saveSettings);
     elements.dockerThreads.addEventListener('change', saveSettings);
 
@@ -117,16 +123,21 @@
     elements.permissionErrorDismiss.addEventListener('click', hidePermissionError);
   }
 
+  function setCollapsed(header, collapsed) {
+    document.getElementById(header.getAttribute('data-toggle')).classList.toggle('collapsed', collapsed);
+    header.querySelector('.toggle-icon').classList.toggle('collapsed', collapsed);
+  }
+
   function setupCollapsibles() {
     document.querySelectorAll('[data-toggle]').forEach(header => {
       const contentId = header.getAttribute('data-toggle');
       const content = document.getElementById(contentId);
+      // The markup decides the default; the chevron must start in sync with it
+      setCollapsed(header, content.classList.contains('collapsed'));
 
       header.addEventListener('click', () => {
-        content.classList.toggle('collapsed');
-        header.querySelector('.toggle-icon')?.classList.toggle('collapsed');
+        setCollapsed(header, !content.classList.contains('collapsed'));
 
-        // Save state to extension
         const collapsedSections = uiState.collapsedSections || {};
         collapsedSections[contentId] = content.classList.contains('collapsed');
         uiState.collapsedSections = collapsedSections;
@@ -139,10 +150,8 @@
     const collapsedSections = uiState.collapsedSections || {};
     document.querySelectorAll('[data-toggle]').forEach(header => {
       const contentId = header.getAttribute('data-toggle');
-      const content = document.getElementById(contentId);
-      if (collapsedSections[contentId]) {
-        content.classList.add('collapsed');
-        header.querySelector('.toggle-icon')?.classList.add('collapsed');
+      if (contentId in collapsedSections) {
+        setCollapsed(header, collapsedSections[contentId]);
       }
     });
   }
@@ -172,7 +181,7 @@
     elements.apiKey.placeholder = `Enter your ${config.label} API key`;
     elements.apiKey.value = '';
     elements.apiKeyLink.href = config.keysUrl;
-    elements.apiKeyLink.textContent = `Get a ${config.label} API key ↗`;
+    elements.apiKeyLink.textContent = `Get your ${config.label} API key ↗`;
     elements.localUrlGroup.style.display = config.transcriptionUrl ? 'none' : 'block';
     elements.dockerThreadsGroup.style.display = provider === 'docker' ? 'block' : 'none';
 
@@ -187,6 +196,7 @@
     );
     elements.transcriptionModelGroup.style.display =
       config.transcriptionModels.length > 1 ? 'block' : 'none';
+    renderModelDetails();
 
     if (supportsCleanup) {
       reset =
@@ -202,6 +212,16 @@
     }
 
     return reset;
+  }
+
+  /** Settings header summary + the hint under the model picker, both derived from the current selection */
+  function renderModelDetails() {
+    const config = PROVIDERS[elements.provider.value];
+    const model = config.transcriptionModels.find((m) => m.id === elements.transcriptionModel.value);
+    elements.settingsSummary.textContent =
+      config.transcriptionModels.length > 1 ? `${config.label} · ${model.label}` : config.label;
+    elements.transcriptionModelHint.textContent = model.hint || '';
+    elements.transcriptionModelHint.style.display = model.hint ? 'block' : 'none';
   }
 
   function handleProviderChange() {
@@ -404,7 +424,7 @@
 
   function resetRecordingUI() {
     isRecording = false;
-    elements.recordingStatus.textContent = 'Ready to Record';
+    elements.recordingStatus.textContent = 'Ready';
     elements.recordingStatus.className = '';
     elements.timer.textContent = '00:00:00';
     elements.startBtn.style.display = 'inline-flex';
@@ -500,8 +520,9 @@
           <div class="history-item-date">${formatDate(entry.date)}</div>
           <div class="history-item-preview">${escapeHtml(entry.preview)}</div>
         </div>
-        <button class="icon-button history-item-copy" title="Copy">&#128203;</button>
+        <button class="icon-button history-item-copy" title="Copy"></button>
       `;
+      item.querySelector('.history-item-copy').appendChild(elements.copyIcon.content.cloneNode(true));
 
       item.querySelector('.history-item-content').addEventListener('click', () => {
         showTranscription(entry.text);
@@ -639,7 +660,7 @@
 
   function formatDate(isoString) {
     const date = new Date(isoString);
-    return date.toLocaleString();
+    return date.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
   function escapeHtml(text) {
