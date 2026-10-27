@@ -2,6 +2,24 @@
 
 All notable changes to the Voice Transcriber extension will be documented in this file.
 
+## [1.4.0] - 2026-10-27
+
+### Added
+- **Model picker for the Docker provider**, right under the provider: Large v3 Turbo (new default), Small, Base. On a real voice note in Russian with English words mixed in, Turbo keeps "Excel", "DevTools" and "inspect" in Latin and adds punctuation, where Small wrote "дофтурс" and "нет ворк" with no punctuation at all. Turbo runs at about the speed the audio plays with 3 threads
+- Each model gets its own RAM cap (Base 1 GB, Small 2 GB, Turbo 3 GB, measured peaks 0.5 / 1.0 / 1.65 GB), and switching models recreates the container on the next run. Downloaded models stay in the Docker volume, so switching back costs nothing
+
+### Changed
+- **Calmer panel.** Recording sits on top without a box, file upload is a one-line drop zone under it instead of a collapsed section, and Settings and History are flat collapsible rows in VS Code's own style. Emoji icons are replaced with SVG icons that follow the theme, and nothing bounces on hover anymore
+- The Settings header shows the current provider and model, so you can see what will run without opening it
+- History rows are one line each (date and preview), with the copy button appearing on hover
+
+### Fixed
+- A section you left open (History, for example) stays open after the panel is reopened; before, it always collapsed again
+- Section chevrons now match whether the section is open
+
+### Notes
+- If you used the Docker provider in 1.3.x, your saved model is still Small. Switch it to Large v3 Turbo in Settings for the better quality
+
 ## [1.3.1] - 2026-10-26
 
 ### Fixed
