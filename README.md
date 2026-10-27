@@ -60,10 +60,18 @@ Get an API key from [openrouter.ai/keys](https://openrouter.ai/keys), select "Op
 
 Pick "Docker (local Whisper)" to transcribe on your own CPU, with no API key and no audio leaving your machine. Docker must be installed and running; the extension does the rest:
 
-- The first run builds a small image (`voice-transcriber-whisper`) and downloads the Whisper `small` model (~500 MB) into the `voice-transcriber-whisper-models` volume, so later runs skip both
-- Every transcription starts the `voice-transcriber-whisper` container and stops it when done, so it holds no CPU or RAM in between. Starting it and loading the model takes ~10-15 seconds
-- **CPU threads** (Advanced Settings) defaults to a quarter of your cores, at most 4, and the container is capped to exactly that many CPUs and 2 GB of RAM. More threads finish sooner but load your machine harder; past 4, Whisper in Docker gets slower rather than faster
-- On an Apple M4 Pro with 3 threads, a minute of speech takes about 15-25 seconds
+- The first run builds a small image (`voice-transcriber-whisper`) and downloads the chosen model into the `voice-transcriber-whisper-models` volume, so later runs skip both
+- Every transcription starts the `voice-transcriber-whisper` container and stops it when done, so it holds no CPU or RAM in between. Starting it and loading the model takes ~10-20 seconds
+- **Model** (under the provider picker). Measured on an Apple M4 Pro with 3 threads, on a 90-second voice note in Russian with English words mixed in:
+
+  | model | download | RAM cap | time for 90 s | mixed Russian/English |
+  |---|---|---|---|---|
+  | Large v3 Turbo (default) | 1.6 GB | 3 GB | ~90-100 s | Excel, DevTools, inspect in Latin, with punctuation |
+  | Small | 490 MB | 2 GB | ~50-60 s | no punctuation, "дофтурс", "нет ворк" |
+  | Base | 150 MB | 1 GB | ~10-20 s | "чадая ПТ", "экс-эльфайлики" |
+
+  `medium` was left out: on the same recordings it was both worse than Turbo and three times slower
+- **CPU threads** (Advanced) defaults to a quarter of your cores, at most 4, and the container is capped to exactly that many CPUs. More threads finish sooner but load your machine harder; past 4, Whisper in Docker gets slower rather than faster
 - The server listens on `127.0.0.1:47913` only. If the extension's server files change in an update, the container is recreated automatically
 
 ### Local server

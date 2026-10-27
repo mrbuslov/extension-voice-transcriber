@@ -9,6 +9,7 @@ import {
   TranscriptSegment,
   TranscriptionResult,
   findTranscriptionModel,
+  findDockerWhisperModel,
 } from '../types';
 import { isFfmpegAvailable, runFfmpeg } from './ffmpeg';
 import { DockerWhisperService } from './dockerWhisperService';
@@ -43,6 +44,7 @@ export class WhisperService {
     findTranscriptionModel(settings.provider, settings.transcriptionModel);
     if (settings.provider === 'docker') {
       return this.dockerWhisper.withRunningContainer(
+        findDockerWhisperModel(settings.transcriptionModel),
         settings.dockerCpuThreads,
         (message) => onProgress?.(message),
         () => this.route(audioBuffer, mimeType, settings, apiKey, onProgress)

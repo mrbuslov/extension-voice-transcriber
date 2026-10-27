@@ -10,6 +10,7 @@ export interface ModelOption {
 export interface TranscriptionModelOption extends ModelOption {
   /** Verified against the live API, not taken from vendor docs */
   supportsTimestamps: boolean;
+  hint: string | null;
 }
 
 export interface TranscriptSegment {
@@ -57,9 +58,50 @@ export const DOCKER_WHISPER = {
   /** Off the common 8000/9000 so it doesn't collide with other local services */
   hostPort: 47913,
   containerPort: 9000,
-  model: 'small',
-  memoryLimit: '2g',
 };
+
+export interface DockerWhisperModel {
+  /** faster-whisper model name, passed to the container as WHISPER_MODEL */
+  id: string;
+  label: string;
+  hint: string;
+  downloadSize: string;
+  /** Docker --memory: weights plus decoding buffers, measured peak RSS with headroom */
+  memoryLimit: string;
+}
+
+/** First entry is the default */
+export const DOCKER_WHISPER_MODELS: DockerWhisperModel[] = [
+  {
+    id: 'large-v3-turbo',
+    label: 'Large v3 Turbo (default)',
+    hint: 'Best quality: keeps English words like Excel or DevTools in Latin inside Russian speech, with punctuation. About as fast as the audio plays on 3 threads. 1.6 GB download.',
+    downloadSize: '1.6 GB',
+    memoryLimit: '3g',
+  },
+  {
+    id: 'small',
+    label: 'Small',
+    hint: 'About 2x faster than Turbo, but drops punctuation and spells many English words in Cyrillic. 490 MB download.',
+    downloadSize: '490 MB',
+    memoryLimit: '2g',
+  },
+  {
+    id: 'base',
+    label: 'Base',
+    hint: 'Fastest and lightest, for short clear dictation. Garbles mixed-language speech. 150 MB download.',
+    downloadSize: '150 MB',
+    memoryLimit: '1g',
+  },
+];
+
+export function findDockerWhisperModel(modelId: string): DockerWhisperModel {
+  const model = DOCKER_WHISPER_MODELS.find((m) => m.id === modelId);
+  if (!model) {
+    throw new Error(`${modelId} is not a Docker Whisper model. Pick one in Settings.`);
+  }
+  return model;
+}
 
 /** A quarter of the cores, at most 4: past 4 threads ctranslate2 inside Docker gets slower, not faster */
 export function defaultDockerCpuThreads(): number {
@@ -85,7 +127,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     chunkSeconds: 600,
     requestTimeoutMs: 60_000,
     maxParallelChunks: 5,
-    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: true }],
+    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: true, hint: null }],
     cleanupModels: [
       { id: 'gpt-4.1-nano', label: 'gpt-4.1-nano (default)' },
       { id: 'gpt-4.1-mini', label: 'gpt-4.1-mini' },
@@ -108,12 +150,12 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     requestTimeoutMs: 240_000,
     maxParallelChunks: 5,
     transcriptionModels: [
-      { id: 'openai/whisper-1', label: 'Whisper 1 (default)', supportsTimestamps: true },
-      { id: 'openai/whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo', supportsTimestamps: true },
-      { id: 'deepgram/nova-3', label: 'Deepgram Nova-3', supportsTimestamps: true },
-      { id: 'openai/gpt-4o-mini-transcribe', label: 'GPT-4o Mini Transcribe (no timestamps)', supportsTimestamps: false },
-      { id: 'openai/gpt-4o-transcribe', label: 'GPT-4o Transcribe (no timestamps)', supportsTimestamps: false },
-      { id: 'mistralai/voxtral-mini-transcribe', label: 'Voxtral Mini Transcribe (no timestamps)', supportsTimestamps: false },
+      { id: 'openai/whisper-1', label: 'Whisper 1 (default)', supportsTimestamps: true, hint: null },
+      { id: 'openai/whisper-large-v3-turbo', label: 'Whisper Large v3 Turbo', supportsTimestamps: true, hint: null },
+      { id: 'deepgram/nova-3', label: 'Deepgram Nova-3', supportsTimestamps: true, hint: null },
+      { id: 'openai/gpt-4o-mini-transcribe', label: 'GPT-4o Mini Transcribe (no timestamps)', supportsTimestamps: false, hint: null },
+      { id: 'openai/gpt-4o-transcribe', label: 'GPT-4o Transcribe (no timestamps)', supportsTimestamps: false, hint: null },
+      { id: 'mistralai/voxtral-mini-transcribe', label: 'Voxtral Mini Transcribe (no timestamps)', supportsTimestamps: false, hint: null },
     ],
     cleanupModels: [
       { id: 'openai/gpt-4.1-nano', label: 'gpt-4.1-nano (default)' },
@@ -136,14 +178,14 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     chunkSeconds: 600,
     requestTimeoutMs: 60_000,
     maxParallelChunks: 5,
-    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: false }],
+    transcriptionModels: [{ id: 'whisper-1', label: 'whisper-1', supportsTimestamps: false, hint: null }],
     cleanupModels: [],
   },
   docker: {
     label: 'Docker (local Whisper)',
     hint:
       'Runs Whisper on your CPU in a Docker container, audio never leaves your machine. Needs Docker running. ' +
-      'The first run builds the image and downloads the ~500 MB model.',
+      'The first run builds the image and downloads the chosen model.',
     requiresApiKey: false,
     keyPlaceholder: '',
     keysUrl: '',
@@ -155,9 +197,7 @@ export const PROVIDERS: Record<Provider, ProviderConfig> = {
     chunkSeconds: 120,
     requestTimeoutMs: 600_000,
     maxParallelChunks: 1,
-    transcriptionModels: [
-      { id: DOCKER_WHISPER.model, label: `Whisper ${DOCKER_WHISPER.model} (CPU)`, supportsTimestamps: true },
-    ],
+    transcriptionModels: DOCKER_WHISPER_MODELS.map(({ id, label, hint }) => ({ id, label, hint, supportsTimestamps: true })),
     cleanupModels: [],
   },
 };

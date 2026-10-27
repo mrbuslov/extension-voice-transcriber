@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { DOCKER_WHISPER } from '../types';
+import { DOCKER_WHISPER, DockerWhisperModel } from '../types';
 import { findExecutable, runProcess } from './executables';
 
 const BUILD_CONTEXT_FILES = ['Dockerfile', 'requirements.txt', 'server.py'];
@@ -36,6 +36,7 @@ export class DockerWhisperService {
   constructor(private readonly buildContextDir: string) {}
 
   async withRunningContainer<T>(
+    model: DockerWhisperModel,
     cpuThreads: number,
     onProgress: (message: string) => void,
     work: () => Promise<T>
@@ -43,7 +44,7 @@ export class DockerWhisperService {
     this.activeJobs++;
     try {
       if (!this.starting) {
-        this.starting = this.bringUp(cpuThreads, onProgress).finally(() => {
+        this.starting = this.bringUp(model, cpuThreads, onProgress).finally(() => {
           this.starting = undefined;
         });
       }
@@ -69,14 +70,22 @@ export class DockerWhisperService {
       });
   }
 
-  private async bringUp(cpuThreads: number, onProgress: (message: string) => void): Promise<void> {
+  private async bringUp(
+    model: DockerWhisperModel,
+    cpuThreads: number,
+    onProgress: (message: string) => void
+  ): Promise<void> {
     await this.stopping;
     const docker = this.dockerCli();
     onProgress('Checking Docker...');
     await this.assertCpuBudget(docker, cpuThreads);
 
     const image = `${DOCKER_WHISPER.imageRepository}:${this.buildContextHash()}`;
-    const spec = createHash('sha256').update(JSON.stringify({ image, cpuThreads, ...DOCKER_WHISPER })).digest('hex').slice(0, 12);
+    const spec = createHash('sha256')
+      .update(JSON.stringify({ image, cpuThreads, model, ...DOCKER_WHISPER }))
+      .digest('hex')
+      .slice(0, 12);
+    const loadingMessage = `Loading Whisper ${model.id} (downloads ${model.downloadSize} the first time)...`;
 
     const state = await this.containerState(docker);
     if (state && state.spec === spec) {
@@ -84,7 +93,7 @@ export class DockerWhisperService {
         onProgress('Starting the Whisper container...');
         await docker.run(['start', DOCKER_WHISPER.containerName]);
       }
-      await this.waitUntilHealthy(docker, onProgress, 'Loading the Whisper model...');
+      await this.waitUntilHealthy(docker, onProgress, loadingMessage);
       return;
     }
 
@@ -99,7 +108,6 @@ export class DockerWhisperService {
       onProgress('Building the Whisper Docker image (first run only, 1-3 min)...');
       await docker.run(['build', '--tag', image, this.buildContextDir]);
     }
-    const modelsCached = await this.volumeExists(docker);
     onProgress('Starting the Whisper container...');
     await docker.run([
       'run', '--detach',
@@ -109,17 +117,13 @@ export class DockerWhisperService {
       '--label', `${SPEC_LABEL}=${spec}`,
       '--publish', `127.0.0.1:${DOCKER_WHISPER.hostPort}:${DOCKER_WHISPER.containerPort}`,
       '--volume', `${DOCKER_WHISPER.modelsVolume}:/models`,
-      '--env', `WHISPER_MODEL=${DOCKER_WHISPER.model}`,
+      '--env', `WHISPER_MODEL=${model.id}`,
       '--env', `WHISPER_CPU_THREADS=${cpuThreads}`,
       '--cpus', String(cpuThreads),
-      '--memory', DOCKER_WHISPER.memoryLimit,
+      '--memory', model.memoryLimit,
       image,
     ]);
-    await this.waitUntilHealthy(
-      docker,
-      onProgress,
-      modelsCached ? 'Loading the Whisper model...' : 'Downloading the Whisper model (~500 MB, first run only)...'
-    );
+    await this.waitUntilHealthy(docker, onProgress, loadingMessage);
   }
 
   private dockerCli(): DockerCli {
@@ -174,11 +178,6 @@ export class DockerWhisperService {
     }
     // A container without our label was created by hand or by an older version: treat it as stale
     return { status, image, spec: spec ?? '' };
-  }
-
-  private async volumeExists(docker: DockerCli): Promise<boolean> {
-    const output = await docker.run(['volume', 'ls', '--quiet', '--filter', `name=^${DOCKER_WHISPER.modelsVolume}$`]);
-    return output.trim() !== '';
   }
 
   private async imageExists(docker: DockerCli, image: string): Promise<boolean> {
