@@ -85,7 +85,6 @@ export class DockerWhisperService {
       .update(JSON.stringify({ image, cpuThreads, model, ...DOCKER_WHISPER }))
       .digest('hex')
       .slice(0, 12);
-    const loadingMessage = `Loading Whisper ${model.id} (downloads ${model.downloadSize} the first time)...`;
 
     const state = await this.containerState(docker);
     if (state && state.spec === spec) {
@@ -93,7 +92,7 @@ export class DockerWhisperService {
         onProgress('Starting the Whisper container...');
         await docker.run(['start', DOCKER_WHISPER.containerName]);
       }
-      await this.waitUntilHealthy(docker, onProgress, loadingMessage);
+      await this.waitUntilHealthy(docker, model, onProgress);
       return;
     }
 
@@ -123,7 +122,7 @@ export class DockerWhisperService {
       '--memory', model.memoryLimit,
       image,
     ]);
-    await this.waitUntilHealthy(docker, onProgress, loadingMessage);
+    await this.waitUntilHealthy(docker, model, onProgress);
   }
 
   private dockerCli(): DockerCli {
@@ -187,22 +186,25 @@ export class DockerWhisperService {
 
   private async waitUntilHealthy(
     docker: DockerCli,
-    onProgress: (message: string) => void,
-    waitingMessage: string
+    model: DockerWhisperModel,
+    onProgress: (message: string) => void
   ): Promise<void> {
-    const healthUrl = `http://127.0.0.1:${DOCKER_WHISPER.hostPort}/health`;
     const startedAt = Date.now();
     while (Date.now() - startedAt < STARTUP_TIMEOUT_MS) {
-      if (await isHealthy(healthUrl)) {
+      const health = await readHealth();
+      if (health.state === 'ready') {
         return;
       }
-      const state = await this.containerState(docker);
-      if (state?.status !== 'running') {
+      if (health.state === 'failed') {
+        throw new Error(`Whisper could not load ${model.id}: ${health.error}`);
+      }
+      const container = await this.containerState(docker);
+      if (container?.status !== 'running') {
         const logs = await docker.run(['logs', '--tail', String(LOG_TAIL_LINES), DOCKER_WHISPER.containerName], { stderrToo: true });
-        throw new Error(`Whisper container stopped (${state ? state.status : 'removed'}). Last logs:\n${logs.trim()}`);
+        throw new Error(`Whisper container stopped (${container ? container.status : 'removed'}). Last logs:\n${logs.trim()}`);
       }
       const seconds = Math.round((Date.now() - startedAt) / 1000);
-      onProgress(`${waitingMessage} ${seconds}s`);
+      onProgress(`${progressMessage(health.state, model)} ${seconds}s`);
       await new Promise((resolve) => setTimeout(resolve, HEALTH_POLL_MS));
     }
     throw new Error(`Whisper container did not become healthy within ${STARTUP_TIMEOUT_MS / 60_000} min. Check "docker logs ${DOCKER_WHISPER.containerName}".`);
@@ -224,11 +226,36 @@ class DockerCli {
   }
 }
 
-async function isHealthy(url: string): Promise<boolean> {
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(HEALTH_POLL_MS) });
-    return response.ok;
-  } catch {
-    return false; // connection refused while the model is still loading
+type ServerHealth =
+  | { state: 'starting' | 'loading' | 'downloading' | 'ready' }
+  | { state: 'failed'; error: string };
+
+function progressMessage(state: 'starting' | 'loading' | 'downloading', model: DockerWhisperModel): string {
+  switch (state) {
+    case 'starting':
+      return 'Starting the Whisper server...';
+    case 'loading':
+      return `Loading Whisper ${model.id} into memory...`;
+    case 'downloading':
+      return `Downloading Whisper ${model.id} (${model.downloadSize}, first time only)...`;
   }
+}
+
+async function readHealth(): Promise<ServerHealth> {
+  let response: Response;
+  try {
+    response = await fetch(`http://127.0.0.1:${DOCKER_WHISPER.hostPort}/health`, {
+      signal: AbortSignal.timeout(HEALTH_POLL_MS),
+    });
+  } catch {
+    return { state: 'starting' }; // connection refused until the server process is listening
+  }
+  const body = (await response.json()) as { state?: string; error?: { message?: string } };
+  if (body.state === 'ready' || body.state === 'loading' || body.state === 'downloading') {
+    return { state: body.state };
+  }
+  if (body.state === 'failed' && body.error?.message) {
+    return { state: 'failed', error: body.error.message };
+  }
+  throw new Error(`Unexpected /health response from the Whisper server (HTTP ${response.status}): ${JSON.stringify(body)}`);
 }
